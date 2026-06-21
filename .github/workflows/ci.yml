@@ -15,7 +15,7 @@ jobs:
       - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y
           libwebkit2gtk-4.1-dev
-          libappindicator3-dev
+          libayatana-appindicator3-dev
           librsvg2-dev
           patchelf
           libudev-dev
@@ -55,3 +55,30 @@ jobs:
 
       - name: Vite build
         run: npm run build
+
+  firmware-compile:
+    name: PlatformIO firmware compile
+    runs-on: ubuntu-22.04
+    needs: rust
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: ~/.platformio
+          key: pio-${{ runner.os }}-${{ hashFiles('src-tauri/templates/platformio.ini.jinja2') }}
+
+      - name: Install PlatformIO
+        run: pip install platformio
+
+      - name: Compile generated firmware
+        run: cargo test --manifest-path src-tauri/Cargo.toml --test pio_compile
+        env:
+          PIO_BIN: pio

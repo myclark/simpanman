@@ -1,10 +1,10 @@
 mod build;
-mod codegen;
+pub mod codegen;
 mod commands;
 mod device;
-mod identity;
-mod model;
-mod pins;
+pub mod identity;
+pub mod model;
+pub mod pins;
 
 pub fn run() {
     env_logger::init();
