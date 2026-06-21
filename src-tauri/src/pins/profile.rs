@@ -1,8 +1,6 @@
 use crate::model::types::BoardType;
 
 pub struct BoardProfile {
-    pub board_type: BoardType,
-    pub digital_pins: Vec<String>,
     pub analog_pins: Vec<String>,
     pub interrupt_pins: Vec<String>,
     pub serial_pins: Vec<String>,
@@ -11,11 +9,11 @@ pub struct BoardProfile {
 
 pub fn profile_for(board_type: &BoardType) -> BoardProfile {
     match board_type {
-        BoardType::Leonardo | BoardType::Micro | BoardType::ProMicro => atmega32u4_profile(board_type.clone()),
+        BoardType::Leonardo | BoardType::Micro | BoardType::ProMicro => atmega32u4_profile(),
     }
 }
 
-fn atmega32u4_profile(board_type: BoardType) -> BoardProfile {
+fn atmega32u4_profile() -> BoardProfile {
     let digital_pins: Vec<String> = (0..=13).map(|n| format!("D{n}")).collect();
     let analog_pins: Vec<String> = (0..=5).map(|n| format!("A{n}")).collect();
     let interrupt_pins = vec!["D0", "D1", "D2", "D3", "D7"]
@@ -24,12 +22,10 @@ fn atmega32u4_profile(board_type: BoardType) -> BoardProfile {
         .collect();
     let serial_pins = vec!["D0".to_string(), "D1".to_string()];
 
-    let mut all_usable_pins = digital_pins.clone();
+    let mut all_usable_pins = digital_pins;
     all_usable_pins.extend(analog_pins.clone());
 
     BoardProfile {
-        board_type,
-        digital_pins,
         analog_pins,
         interrupt_pins,
         serial_pins,

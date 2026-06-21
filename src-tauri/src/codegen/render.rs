@@ -89,11 +89,9 @@ fn collect_used_axes(controls: &[&Control]) -> HashSet<String> {
             Control::Analog(a) => {
                 axes.insert(axis_to_string(&a.analog.axis));
             }
-            Control::Encoder(e) => {
-                if e.encoder.mode == EncoderMode::Axis {
-                    if let Some(axis) = &e.encoder.axis {
-                        axes.insert(axis_to_string(axis));
-                    }
+            Control::Encoder(e) if e.encoder.mode == EncoderMode::Axis => {
+                if let Some(axis) = &e.encoder.axis {
+                    axes.insert(axis_to_string(axis));
                 }
             }
             _ => {}
@@ -277,7 +275,7 @@ fn build_context(
         crate::model::types::BoardType::ProMicro => "pro_micro",
     };
 
-    Ok(Value::from_serialize(&json!({
+    Ok(Value::from_serialize(json!({
         "board": {
             "id": board.id,
             "env_name": env_name,

@@ -21,6 +21,7 @@ pub fn trigger_reset(port_name: &str) -> anyhow::Result<()> {
 /// Poll for a new serial port to appear after a bootloader reset.
 /// Returns the new port name within `timeout`, or an error if it does not appear.
 /// `old_port` is excluded from matching to detect the re-enumerated bootloader port.
+#[allow(dead_code)]
 pub fn wait_for_bootloader_port(
     old_port: &str,
     timeout: Duration,

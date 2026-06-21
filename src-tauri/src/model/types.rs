@@ -237,18 +237,6 @@ impl JoystickAxis {
         }
     }
 
-    pub fn include_flag(&self) -> &'static str {
-        match self {
-            JoystickAxis::X => "includeXAxis",
-            JoystickAxis::Y => "includeYAxis",
-            JoystickAxis::Z => "includeZAxis",
-            JoystickAxis::Rx => "includeRxAxis",
-            JoystickAxis::Ry => "includeRyAxis",
-            JoystickAxis::Rz => "includeRzAxis",
-            JoystickAxis::Slider1 => "includeThrottle",
-            JoystickAxis::Slider2 => "includeRudder",
-        }
-    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]

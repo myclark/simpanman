@@ -52,6 +52,7 @@ pub fn allocate_identity(
     Ok(identity)
 }
 
+#[allow(dead_code)]
 pub fn check_uniqueness(project: &Project) -> Vec<String> {
     let mut seen: std::collections::HashMap<(u32, u32), &str> = std::collections::HashMap::new();
     let mut conflicts = Vec::new();
