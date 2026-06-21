@@ -1,0 +1,99 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-release:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            pio_suffix: windows-x86_64.exe
+            args: ""
+
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            pio_suffix: linux-x86_64
+            args: ""
+
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            pio_suffix: macos-arm64
+            args: "--target aarch64-apple-darwin"
+
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install Linux system deps
+        if: startsWith(matrix.platform, 'ubuntu')
+        run: sudo apt-get update && sudo apt-get install -y
+          libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev patchelf libudev-dev
+
+      - name: Install frontend deps
+        run: npm ci
+
+      # Download pinned PlatformIO standalone executable as the Tauri sidecar.
+      # The filename must be pio-<target-triple>[.exe] for Tauri to resolve it.
+      - name: Download PlatformIO sidecar
+        shell: bash
+        run: |
+          PIO_VERSION="6.1.16"
+          TRIPLE="${{ matrix.target }}"
+          mkdir -p src-tauri/binaries
+
+          if [[ "${{ matrix.platform }}" == "windows-latest" ]]; then
+            DEST="src-tauri/binaries/pio-${TRIPLE}.exe"
+            URL="https://github.com/platformio/platformio-core-installer/releases/download/${PIO_VERSION}/pioinstaller-${PIO_VERSION}-${{ matrix.pio_suffix }}"
+          else
+            DEST="src-tauri/binaries/pio-${TRIPLE}"
+            URL="https://github.com/platformio/platformio-core-installer/releases/download/${PIO_VERSION}/pioinstaller-${PIO_VERSION}-${{ matrix.pio_suffix }}"
+          fi
+
+          echo "Downloading ${URL} -> ${DEST}"
+          curl -fsSL "$URL" -o "$DEST"
+          [[ "${{ matrix.platform }}" != "windows-latest" ]] && chmod +x "$DEST"
+
+      - name: Build and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Sim Panel Manager ${{ github.ref_name }}"
+          releaseBody: "See the assets below to download and install this release."
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}
