@@ -1,0 +1,158 @@
+{
+  "schemaVersion": 1,
+  "name": "Multi-board Demo",
+  "notes": "Exercises every control kind and the headline many-to-many scenario: panels split across boards, and boards carrying controls from several panels. Control names are drawn from the real F-5E panels (Arduino 1/2/3 code.pdf); some assignments and the analog/axis-encoder controls are illustrative additions to cover the full schema. Use as the primary codegen test fixture. IDs are human-readable for clarity; the app uses UUIDs.\n\nDistribution:\n- Panel 'Armament' -> Board A (most) + Board B (Emergency Jettison)  [panel spills across boards]\n- Panel 'Sight'    -> Board B  (5-pos selector + two encoders)\n- Panel 'Systems'  -> Board C (most) + Board B (Rudder Trim)        [panel spills across boards]",
+  "panels": [
+    { "id": "panel-arm", "name": "Armament", "order": 0 },
+    { "id": "panel-sight", "name": "Sight", "order": 1 },
+    { "id": "panel-sys", "name": "Systems", "order": 2 }
+  ],
+  "boards": [
+    { "id": "board-a", "name": "Board A", "type": "leonardo", "identity": { "usbProduct": "Demo Board A", "usbVid": 4617, "usbPid": 1 } },
+    { "id": "board-b", "name": "Board B", "type": "leonardo", "identity": { "usbProduct": "Demo Board B", "usbVid": 4617, "usbPid": 2 } },
+    { "id": "board-c", "name": "Board C", "type": "leonardo", "identity": { "usbProduct": "Demo Board C", "usbVid": 4617, "usbPid": 3 } }
+  ],
+  "controls": [
+    {
+      "id": "ctl-master-arm",
+      "panelId": "panel-arm",
+      "boardId": "board-a",
+      "label": "Master Arm",
+      "kind": "switch",
+      "pin": { "pin": "D2", "inverted": true },
+      "onLabel": "Arm",
+      "offLabel": "Safe"
+    },
+    {
+      "id": "ctl-jettison-select",
+      "panelId": "panel-arm",
+      "boardId": "board-a",
+      "label": "Jettison Select",
+      "kind": "selector",
+      "positions": [
+        { "label": "Select Position", "pins": [ { "pin": "D11", "inverted": true } ], "op": null },
+        { "label": "Off", "pins": [ { "pin": "D10", "inverted": false }, { "pin": "D11", "inverted": false } ], "op": "and" },
+        { "label": "All Pylons", "pins": [ { "pin": "D10", "inverted": true } ], "op": null }
+      ]
+    },
+    {
+      "id": "ctl-emergency-jettison",
+      "panelId": "panel-arm",
+      "boardId": "board-b",
+      "label": "Emergency All Jettison",
+      "kind": "button",
+      "pin": { "pin": "D13", "inverted": true },
+      "notes": "Belongs to the Armament panel but is wired to Board B - demonstrates a panel spilling across boards."
+    },
+
+    {
+      "id": "ctl-missile-mode",
+      "panelId": "panel-sight",
+      "boardId": "board-b",
+      "label": "Missile Mode",
+      "kind": "selector",
+      "notes": "5-position rotary selector from the real sight panel.",
+      "positions": [
+        { "label": "Off", "pins": [ { "pin": "D9", "inverted": true } ], "op": null },
+        { "label": "MSL", "pins": [ { "pin": "D10", "inverted": true } ], "op": null },
+        { "label": "A/A1-Guns", "pins": [ { "pin": "D8", "inverted": true } ], "op": null },
+        { "label": "A/A2-Guns", "pins": [ { "pin": "D7", "inverted": true } ], "op": null },
+        { "label": "MAN", "pins": [ { "pin": "D6", "inverted": true } ], "op": null }
+      ]
+    },
+    {
+      "id": "ctl-sight-brightness",
+      "panelId": "panel-sight",
+      "boardId": "board-b",
+      "label": "Sight Brightness",
+      "kind": "encoder",
+      "notes": "Buttons mode, matching the real sightBrightnessKnob (button_mult = 10). Pins A0/A1 are not interrupt-capable - app should warn and fall back to polling, as the original firmware does.",
+      "encoder": {
+        "pinA": "A0",
+        "pinB": "A1",
+        "countsPerDetent": 4,
+        "mode": "buttons",
+        "buttonCw": { "label": "Brighter" },
+        "buttonCcw": { "label": "Dimmer" },
+        "pressesPerDetent": 10,
+        "pulseMs": 10
+      }
+    },
+    {
+      "id": "ctl-sight-depression",
+      "panelId": "panel-sight",
+      "boardId": "board-b",
+      "label": "Sight Depression",
+      "kind": "encoder",
+      "notes": "Axis mode - demonstrates the alternative encoder behaviour (configurable axis movement per detent).",
+      "encoder": {
+        "pinA": "A2",
+        "pinB": "A3",
+        "countsPerDetent": 4,
+        "mode": "axis",
+        "axis": "Slider1",
+        "deltaPerStep": 8,
+        "min": 0,
+        "max": 1023,
+        "wrap": false
+      }
+    },
+
+    {
+      "id": "ctl-pitot-anti-ice",
+      "panelId": "panel-sys",
+      "boardId": "board-c",
+      "label": "Pitot Anti-Ice",
+      "kind": "switch",
+      "pin": { "pin": "D12", "inverted": true },
+      "onLabel": "On",
+      "offLabel": "Off"
+    },
+    {
+      "id": "ctl-engine-anti-ice",
+      "panelId": "panel-sys",
+      "boardId": "board-c",
+      "label": "Engine Anti-Ice",
+      "kind": "switch",
+      "pin": { "pin": "D11", "inverted": true },
+      "onLabel": "On",
+      "offLabel": "Off"
+    },
+    {
+      "id": "ctl-cabin-pressure",
+      "panelId": "panel-sys",
+      "boardId": "board-c",
+      "label": "Cabin Pressure",
+      "kind": "analog",
+      "notes": "Illustrative analog control (potentiometer) mapped to an axis.",
+      "analog": {
+        "pin": "A0",
+        "axis": "Z",
+        "inMin": 0,
+        "inMax": 1023,
+        "outMin": 0,
+        "outMax": 1023,
+        "invert": false,
+        "deadzone": 8,
+        "smoothing": 0.2
+      }
+    },
+    {
+      "id": "ctl-rudder-trim",
+      "panelId": "panel-sys",
+      "boardId": "board-b",
+      "label": "Rudder Trim",
+      "kind": "analog",
+      "notes": "Belongs to the Systems panel but wired to Board B - second example of a panel spilling across boards.",
+      "analog": {
+        "pin": "A4",
+        "axis": "Rz",
+        "inMin": 0,
+        "inMax": 1023,
+        "outMin": 0,
+        "outMax": 1023,
+        "invert": true
+      }
+    }
+  ]
+}

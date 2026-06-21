@@ -1,0 +1,62 @@
+{
+  "schemaVersion": 1,
+  "name": "F-5E Armament Panel",
+  "notes": "Faithful conversion of 'Arduino 1 code.pdf' (a single Leonardo, 34 logical buttons). One panel, one board. Demonstrates buttons, 2-position switches, and 3-position selectors, including AND-combined pin expressions for switch middle positions. IDs here are human-readable for clarity; the app uses UUIDs.",
+  "panels": [
+    { "id": "panel-armament", "name": "Armament Panel", "order": 0 }
+  ],
+  "boards": [
+    {
+      "id": "board-arm",
+      "name": "Armament",
+      "type": "leonardo",
+      "identity": {
+        "usbProduct": "F5E Armament",
+        "usbVid": 4617,
+        "usbPid": 1
+      }
+    }
+  ],
+  "controls": [
+    {
+      "id": "ctl-jettison-select",
+      "panelId": "panel-armament",
+      "boardId": "board-arm",
+      "label": "Jettison Select",
+      "kind": "selector",
+      "positions": [
+        { "label": "Select Position", "pins": [ { "pin": "D11", "inverted": true } ], "op": null },
+        { "label": "Off", "pins": [ { "pin": "D10", "inverted": false }, { "pin": "D11", "inverted": false } ], "op": "and" },
+        { "label": "All Pylons", "pins": [ { "pin": "D10", "inverted": true } ], "op": null }
+      ]
+    },
+    { "id": "ctl-select-jettison", "panelId": "panel-armament", "boardId": "board-arm", "label": "Select Jettison", "kind": "button", "pin": { "pin": "D12", "inverted": true } },
+    { "id": "ctl-rwt-weapon", "panelId": "panel-armament", "boardId": "board-arm", "label": "Right Wingtip Weapon", "kind": "switch", "pin": { "pin": "D9", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-r-outboard", "panelId": "panel-armament", "boardId": "board-arm", "label": "Right Outboard Pylon", "kind": "switch", "pin": { "pin": "D8", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-r-inboard", "panelId": "panel-armament", "boardId": "board-arm", "label": "Right Inboard Pylon", "kind": "switch", "pin": { "pin": "D7", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-center-pylon", "panelId": "panel-armament", "boardId": "board-arm", "label": "Center Pylon", "kind": "switch", "pin": { "pin": "D6", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-l-inboard", "panelId": "panel-armament", "boardId": "board-arm", "label": "Left Inboard Pylon", "kind": "switch", "pin": { "pin": "D5", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-l-outboard", "panelId": "panel-armament", "boardId": "board-arm", "label": "Left Outboard Pylon", "kind": "switch", "pin": { "pin": "D4", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-lwt-weapon", "panelId": "panel-armament", "boardId": "board-arm", "label": "Left Wingtip Weapon", "kind": "switch", "pin": { "pin": "D3", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-master-arm", "panelId": "panel-armament", "boardId": "board-arm", "label": "Master Arm", "kind": "switch", "pin": { "pin": "D2", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-eng-start-r", "panelId": "panel-armament", "boardId": "board-arm", "label": "Engine Start R", "kind": "button", "pin": { "pin": "D1", "inverted": false }, "notes": "Wired active-high in the original; D1 is also Serial TX - app should warn." },
+    { "id": "ctl-eng-start-l", "panelId": "panel-armament", "boardId": "board-arm", "label": "Engine Start L", "kind": "button", "pin": { "pin": "D0", "inverted": false }, "notes": "Wired active-high in the original; D0 is also Serial RX - app should warn." },
+    { "id": "ctl-emergency-jettison", "panelId": "panel-armament", "boardId": "board-arm", "label": "Emergency All Jettison", "kind": "button", "pin": { "pin": "D13", "inverted": true } },
+    { "id": "ctl-pitch-damper", "panelId": "panel-armament", "boardId": "board-arm", "label": "Pitch Damper", "kind": "switch", "pin": { "pin": "A0", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-yaw-damper", "panelId": "panel-armament", "boardId": "board-arm", "label": "Yaw Damper", "kind": "switch", "pin": { "pin": "A1", "inverted": true }, "onLabel": "On", "offLabel": "Off" },
+    { "id": "ctl-landing-light", "panelId": "panel-armament", "boardId": "board-arm", "label": "Landing Light", "kind": "switch", "pin": { "pin": "A2", "inverted": false }, "onLabel": "On", "offLabel": "Off", "notes": "Original wires this one the opposite sense to the dampers (On active-high)." },
+    {
+      "id": "ctl-ripple-interval",
+      "panelId": "panel-armament",
+      "boardId": "board-arm",
+      "label": "Ripple Interval",
+      "kind": "selector",
+      "positions": [
+        { "label": "0.14 sec", "pins": [ { "pin": "A3", "inverted": true } ], "op": null },
+        { "label": "0.10 sec", "pins": [ { "pin": "A3", "inverted": false }, { "pin": "A4", "inverted": false } ], "op": "and" },
+        { "label": "0.06 sec", "pins": [ { "pin": "A4", "inverted": true } ], "op": null }
+      ]
+    },
+    { "id": "ctl-bomb-arm", "panelId": "panel-armament", "boardId": "board-arm", "label": "Bomb Arm", "kind": "switch", "pin": { "pin": "A5", "inverted": true }, "onLabel": "Safe", "offLabel": "Nose/Tail" }
+  ]
+}
