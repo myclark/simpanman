@@ -1,39 +1,37 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
+import { readFileSync } from "fs";
 
-const host = process.env.TAURI_DEV_HOST;
+const pkg = JSON.parse(
+  readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
+) as { version: string };
 
-export default defineConfig(async () => ({
+// The local Rust server (see src-tauri/src/server.rs). Override with
+// SIMPANMAN_PORT to match a non-default backend port during development.
+const apiPort = process.env.SIMPANMAN_PORT ?? "8787";
+const apiTarget = `http://127.0.0.1:${apiPort}`;
+
+export default defineConfig({
   plugins: [react()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+  },
   clearScreen: false,
   server: {
     port: 1420,
     strictPort: true,
-    host: host || false,
-    hmr: host
-      ? {
-          protocol: "ws",
-          host,
-          port: 1421,
-        }
-      : undefined,
-    watch: {
-      ignored: ["**/src-tauri/**"],
+    proxy: {
+      "/api/events": { target: apiTarget, ws: true },
+      "/api": { target: apiTarget },
     },
   },
-  envPrefix: ["VITE_", "TAURI_ENV_*"],
   build: {
-    target:
-      process.env.TAURI_ENV_PLATFORM == "windows"
-        ? "chrome105"
-        : "safari13",
-    minify: !process.env.TAURI_ENV_DEBUG ? "esbuild" : false,
-    sourcemap: !!process.env.TAURI_ENV_DEBUG,
+    target: "es2022",
   },
-}));
+});

@@ -274,6 +274,12 @@ fn build_context(
         crate::model::types::BoardType::Micro => "micro",
         crate::model::types::BoardType::ProMicro => "pro_micro",
     };
+    // Arduino AVR variant providing pins_arduino.h for the custom board definition.
+    let build_variant = match board.board_type {
+        crate::model::types::BoardType::Leonardo => "leonardo",
+        crate::model::types::BoardType::Micro => "micro",
+        crate::model::types::BoardType::ProMicro => "sparkfun_promicro",
+    };
 
     Ok(Value::from_serialize(json!({
         "board": {
@@ -281,6 +287,7 @@ fn build_context(
             "env_name": env_name,
             "name": board.name,
             "board_type": board_type_str,
+            "build_variant": build_variant,
             "identity": {
                 "usbProduct": board.identity.usb_product,
                 "usbVid": board.identity.usb_vid,

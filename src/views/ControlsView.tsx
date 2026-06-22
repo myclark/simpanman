@@ -16,15 +16,15 @@ export default function ControlsView() {
   const [grouping] = useState<GroupingState>(["panel"]);
   const [expanded, setExpanded] = useState<ExpandedState>({});
 
-  if (!project) {
-    return <EmptyState />;
-  }
-
-  const rows: ControlRow[] = project.controls.map((control) => ({
-    control,
-    panel: project.panels.find((p) => p.id === control.panelId),
-    board: project.boards.find((b) => b.id === control.boardId),
-  }));
+  // All hooks must run unconditionally (Rules of Hooks). When there's no
+  // project the table is built over an empty row set, then we bail out below.
+  const rows: ControlRow[] = project
+    ? project.controls.map((control) => ({
+        control,
+        panel: project.panels.find((p) => p.id === control.panelId),
+        board: project.boards.find((b) => b.id === control.boardId),
+      }))
+    : [];
 
   const table = useReactTable({
     data: rows,
@@ -36,6 +36,10 @@ export default function ControlsView() {
     getExpandedRowModel: getExpandedRowModel(),
     autoResetExpanded: false,
   });
+
+  if (!project) {
+    return <EmptyState />;
+  }
 
   const errorCount = validationReport?.errors.length ?? 0;
   const warnCount = validationReport?.warnings.length ?? 0;
