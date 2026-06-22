@@ -27,6 +27,7 @@ help: ## Show this help
 
 install: ## Install frontend deps and pre-fetch Rust crates
 	npm install
+	npx playwright install chromium
 	cargo fetch --manifest-path $(MANIFEST)
 
 # ── Development (two processes) ───────────────────────────────────────────────
