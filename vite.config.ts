@@ -7,7 +7,7 @@ const pkg = JSON.parse(
   readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
 ) as { version: string };
 
-// The local Rust server (see src-tauri/src/server.rs). Override with
+// The local Rust server (see server/src/server.rs). Override with
 // SIMPANMAN_PORT to match a non-default backend port during development.
 const apiPort = process.env.SIMPANMAN_PORT ?? "8787";
 const apiTarget = `http://127.0.0.1:${apiPort}`;

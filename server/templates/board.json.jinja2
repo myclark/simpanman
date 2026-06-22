@@ -1,0 +1,27 @@
+{
+  "build": {
+    "core": "arduino",
+    "f_cpu": "16000000L",
+    "hwids": [
+      ["{{ board.identity.usbVidHex }}", "{{ board.identity.usbPidHex }}"]
+    ],
+    "mcu": "atmega32u4",
+    "variant": "{{ board.build_variant }}",
+    "usb_product": "{{ board.identity.usbProduct }}",
+    "vid": "{{ board.identity.usbVidHex }}",
+    "pid": "{{ board.identity.usbPidHex }}"
+  },
+  "frameworks": ["arduino"],
+  "name": "{{ board.name }} (SPM Custom)",
+  "upload": {
+    "maximum_ram_size": 2560,
+    "maximum_size": 28672,
+    "protocol": "avr109",
+    "require_upload_port": true,
+    "use_1200bps_touch": true,
+    "wait_for_upload_port": true,
+    "speed": 57600
+  },
+  "url": "https://github.com/myclark/simpanman",
+  "vendor": "Sim Panel Manager"
+}
