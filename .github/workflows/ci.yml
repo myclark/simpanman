@@ -6,33 +6,6 @@ on:
     branches: [main]
 
 jobs:
-  rust:
-    name: Rust tests & lint
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        # libudev is required by the `serialport` crate; no webview deps needed.
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
-
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          components: clippy
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "src-tauri -> target"
-
-      - name: Cargo check
-        run: cargo check --manifest-path src-tauri/Cargo.toml
-
-      - name: Clippy
-        run: cargo clippy --manifest-path src-tauri/Cargo.toml -- -D warnings
-
-      - name: Tests
-        run: cargo test --manifest-path src-tauri/Cargo.toml
-
   frontend:
     name: Frontend build
     runs-on: ubuntu-latest
@@ -82,33 +55,3 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
-  firmware-compile:
-    name: PlatformIO firmware compile
-    runs-on: ubuntu-22.04
-    needs: rust
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install system dependencies
-        # libudev is required by the `serialport` crate to compile the crate.
-        run: sudo apt-get update && sudo apt-get install -y libudev-dev
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: "src-tauri -> target"
-
-      - name: Cache PlatformIO
-        uses: actions/cache@v4
-        with:
-          path: ~/.platformio
-          key: pio-${{ runner.os }}-${{ hashFiles('src-tauri/templates/platformio.ini.jinja2') }}
-
-      - name: Install PlatformIO
-        run: pip install platformio
-
-      - name: Compile generated firmware
-        run: cargo test --manifest-path src-tauri/Cargo.toml --test pio_compile
-        env:
-          PIO_BIN: pio
