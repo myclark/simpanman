@@ -30,11 +30,11 @@ pins, generate per-board firmware, give each board a stable USB identity, and up
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Shell | **Tauri 2** | Small bundle; Rust backend; sidecar model for PlatformIO. |
-| Frontend | **React + TypeScript + Vite** | Use **TanStack Table** (+ optional TanStack Virtual) for the grid. State via Zustand or React Query; styling Tailwind. |
-| Backend | **Rust** (Tauri commands) | Owns model validation, codegen, pin allocation, board I/O, build orchestration. |
+| Shell | **Local Rust server (axum) + system browser** | No embedded webview (avoids the macOS 26 `WKWebView` crash); the binary serves the UI on `127.0.0.1` and opens the default browser. |
+| Frontend | **React + TypeScript + Vite** | Use **TanStack Table** (+ optional TanStack Virtual) for the grid. State via Zustand or React Query; styling Tailwind. Served as static files by the Rust server. |
+| Backend | **Rust** (`axum` HTTP `/api` routes) | Owns model validation, codegen, pin allocation, board I/O, build orchestration. |
 | Templating | **minijinja** (Rust) | Firmware templates embedded via `rust-embed` / `include_str!`. |
-| Toolchain | **PlatformIO Core** bundled as a Tauri **sidecar** (`externalBin`) | Pin a version; ship per-target binary. Do not install at runtime. |
+| Toolchain | **PlatformIO Core** bundled alongside the server binary | Pin a version; ship per-target binary, resolved next to the executable (`SIMPANMAN_PIO` overrides). Do not install at runtime. |
 | Device read (test view) | **hidapi** or **gilrs** crate | Read HID joystick reports to reflect live control state. |
 
 Targets: **Windows** (required — the sim PC) and **macOS** (development/use). Keep all
@@ -45,23 +45,24 @@ platform-specific code (serial port enumeration, sidecar paths) behind small abs
 ## 3. Architecture
 
 ```
-React UI (grid-first)
-  │  Tauri IPC (commands + events)
+React UI (grid-first, runs in the system browser)
+  │  HTTP POST /api/<command>  +  /api/events WebSocket
   ▼
-Rust core
-  ├─ Model store        (load/save project file, validation)
+Rust server (axum, 127.0.0.1)
+  ├─ Model store        (parse/serialize project, validation)
   ├─ Pin allocator      (per-board pin map, conflict detection)
   ├─ Codegen            (minijinja → .ino + platformio.ini per board)
   ├─ Identity registry  (panel/board → assigned PID + USB product string)
-  ├─ Build runner       (spawn pio sidecar, stream stdout/stderr as events)
+  ├─ Build runner       (spawn pio process, stream stdout/stderr as events)
   └─ Device reader      (HID read for live test view)
   │
   ▼
-PlatformIO Core (sidecar)  →  avr toolchain  →  board over USB
+PlatformIO Core (bundled binary)  →  avr toolchain  →  board over USB
 ```
 
-Long-running operations (build/upload, device polling) run async and emit Tauri events
-(`build://log`, `build://status`, `device://state`) the UI subscribes to.
+Long-running operations (build/upload, device polling) run async and broadcast events
+(`build://log`, `build://status`, `device://state`) over the `/api/events` WebSocket,
+which the UI subscribes to.
 
 ---
 
@@ -289,30 +290,36 @@ All editing is driven by the model; validation errors shown inline and aggregate
 ## 11. Repository layout
 
 ```
-/                       (Tauri project root)
+/                       (project root)
   src/                  React + TS (grid, boards, build, test views)
-  src-tauri/
+    lib/api.ts          HTTP client for the /api routes
+    lib/events.ts       /api/events WebSocket client
+  src-tauri/            Rust server crate (name retained for path stability)
     src/
       model/            entities, (de)serialization, validation, migrations
       pins/             board profiles + allocator
       codegen/          minijinja render, project emitter
       identity/         PID/product registry
-      build/            pio sidecar runner, port detection, 1200-baud reset
+      build/            pio process runner, port detection, 1200-baud reset
       device/           HID reader for test view
-      commands.rs       Tauri command surface
+      commands.rs       command implementations (called by the HTTP layer)
+      server.rs         axum router, /api routes, build-event WebSocket
     templates/          minijinja firmware templates (embedded)
-    binaries/           pinned PlatformIO sidecar per target triple
+    binaries/           pinned PlatformIO binary per target triple
   docs/                 this spec, schema docs
 ```
 
 ---
 
-## 12. Tauri command surface (indicative)
+## 12. Command surface (indicative)
+
+Each command is a `POST /api/<name>` route taking a JSON body and returning JSON
+(errors as `400` text). The build stream is delivered over the `/api/events` WebSocket.
 
 ```
-project_new() -> Project
-project_open(path) -> Project
-project_save(path, project) -> ()
+project_new(name) -> Project
+project_open(content) -> Project       # parses uploaded .spm file contents
+project_serialize(project) -> string   # canonical JSON for browser download
 panel_upsert / panel_delete
 board_upsert / board_delete
 control_upsert / control_delete

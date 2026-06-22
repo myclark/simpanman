@@ -1,9 +1,12 @@
+use std::path::PathBuf;
+use std::process::Stdio;
 use std::time::Duration;
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
-use tauri::{AppHandle, Emitter};
-use tauri_plugin_shell::ShellExt;
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::Command;
+use tokio::sync::broadcast;
 
 use crate::codegen::{emitter, render};
 use crate::model::{types::Project, validation::validate};
@@ -24,8 +27,20 @@ pub struct BuildStatusEvent {
     pub exit_code: i32,
 }
 
+/// Events streamed to connected browser clients over the `/api/events` WebSocket.
+/// Serializes as `{ "event": "build://log", "payload": { ... } }` so the frontend
+/// can dispatch by `event` exactly as it did with Tauri's named events.
+#[derive(Serialize, Clone, Debug)]
+#[serde(tag = "event", content = "payload")]
+pub enum ServerEvent {
+    #[serde(rename = "build://log")]
+    BuildLog(BuildLogEvent),
+    #[serde(rename = "build://status")]
+    BuildStatus(BuildStatusEvent),
+}
+
 pub async fn build_board(
-    app: AppHandle,
+    tx: broadcast::Sender<ServerEvent>,
     project: Project,
     board_id: String,
     port: Option<String>,
@@ -43,7 +58,7 @@ pub async fn build_board(
         .ok_or_else(|| anyhow::anyhow!("Board '{}' not found", board_id))?;
     let env_name = board.id.replace('-', "_");
 
-    emit_log(&app, &board_id, format!("Generating firmware for '{}'...", board.name), false);
+    emit_log(&tx, &board_id, format!("Generating firmware for '{}'...", board.name), false);
 
     let generated_board = render::render_board(&project, &board_id)
         .context("firmware generation")?;
@@ -51,64 +66,62 @@ pub async fn build_board(
     let project_dir = emitter::write_to_temp_dir(&generated)
         .context("writing PlatformIO project")?;
 
-    emit_log(&app, &board_id, format!("Project written to {}", project_dir.display()), false);
+    emit_log(&tx, &board_id, format!("Project written to {}", project_dir.display()), false);
 
     if let Some(ref port_name) = port {
-        emit_log(&app, &board_id, format!("Triggering bootloader on {}...", port_name), false);
+        emit_log(&tx, &board_id, format!("Triggering bootloader on {}...", port_name), false);
         if let Err(e) = super::bootloader::trigger_reset(port_name) {
-            emit_log(&app, &board_id, format!("Warning: bootloader reset failed: {e}"), true);
+            emit_log(&tx, &board_id, format!("Warning: bootloader reset failed: {e}"), true);
         } else {
-            std::thread::sleep(Duration::from_millis(500));
+            tokio::time::sleep(Duration::from_millis(500)).await;
         }
     }
 
-    emit_log(&app, &board_id, "Running PlatformIO build + upload...".to_string(), false);
+    emit_log(&tx, &board_id, "Running PlatformIO build + upload...".to_string(), false);
 
-    let mut args = vec!["run", "-e", &env_name, "-t", "upload"];
     let project_dir_str = project_dir.to_string_lossy().to_string();
-    args.extend(["--project-dir", &project_dir_str]);
+    let mut args: Vec<&str> = vec!["run", "-e", &env_name, "-t", "upload", "--project-dir", &project_dir_str];
     if let Some(ref port_name) = port {
-        args.extend(["--upload-port", port_name]);
+        args.push("--upload-port");
+        args.push(port_name.as_str());
     }
 
-    let sidecar = app
-        .shell()
-        .sidecar("pio")
-        .context("creating PIO sidecar command")?;
-
-    let (mut rx, _child) = sidecar
+    let mut child = pio_command()
         .args(&args)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
         .spawn()
-        .context("spawning PIO sidecar")?;
+        .context("spawning PlatformIO process")?;
 
-    use tauri_plugin_shell::process::CommandEvent;
-    let mut exit_code = -1;
+    let stdout = child.stdout.take().context("capturing PlatformIO stdout")?;
+    let stderr = child.stderr.take().context("capturing PlatformIO stderr")?;
 
-    while let Some(event) = rx.recv().await {
-        match event {
-            CommandEvent::Stdout(line) => {
-                let text = String::from_utf8_lossy(&line).to_string();
-                emit_log(&app, &board_id, text, false);
-            }
-            CommandEvent::Stderr(line) => {
-                let text = String::from_utf8_lossy(&line).to_string();
-                emit_log(&app, &board_id, text, true);
-            }
-            CommandEvent::Terminated(status) => {
-                exit_code = status.code.unwrap_or(-1);
-                break;
-            }
-            CommandEvent::Error(e) => {
-                emit_log(&app, &board_id, format!("Process error: {e}"), true);
-                break;
-            }
-            _ => {}
+    // Stream stdout and stderr concurrently so logs interleave in real time.
+    let tx_out = tx.clone();
+    let board_out = board_id.clone();
+    let out_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(stdout).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            emit_log(&tx_out, &board_out, line, false);
         }
-    }
+    });
+    let tx_err = tx.clone();
+    let board_err = board_id.clone();
+    let err_task = tokio::spawn(async move {
+        let mut lines = BufReader::new(stderr).lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            emit_log(&tx_err, &board_err, line, true);
+        }
+    });
+
+    let status = child.wait().await.context("waiting for PlatformIO process")?;
+    let _ = out_task.await;
+    let _ = err_task.await;
+    let exit_code = status.code().unwrap_or(-1);
 
     let success = exit_code == 0;
     emit_log(
-        &app,
+        &tx,
         &board_id,
         if success {
             "Build and upload complete.".to_string()
@@ -118,14 +131,11 @@ pub async fn build_board(
         !success,
     );
 
-    app.emit(
-        "build://status",
-        BuildStatusEvent {
-            board_id: board_id.clone(),
-            success,
-            exit_code,
-        },
-    )
+    tx.send(ServerEvent::BuildStatus(BuildStatusEvent {
+        board_id: board_id.clone(),
+        success,
+        exit_code,
+    }))
     .ok();
 
     if success {
@@ -135,14 +145,29 @@ pub async fn build_board(
     }
 }
 
-fn emit_log(app: &AppHandle, board_id: &str, line: String, is_err: bool) {
-    app.emit(
-        "build://log",
-        BuildLogEvent {
-            board_id: board_id.to_string(),
-            line,
-            is_err,
-        },
-    )
+fn emit_log(tx: &broadcast::Sender<ServerEvent>, board_id: &str, line: String, is_err: bool) {
+    tx.send(ServerEvent::BuildLog(BuildLogEvent {
+        board_id: board_id.to_string(),
+        line,
+        is_err,
+    }))
     .ok();
+}
+
+/// Build a `Command` for the bundled PlatformIO executable. In release builds it
+/// lives next to the server binary; `SIMPANMAN_PIO` overrides the path for dev.
+fn pio_command() -> Command {
+    let path = std::env::var_os("SIMPANMAN_PIO")
+        .map(PathBuf::from)
+        .unwrap_or_else(default_pio_path);
+    Command::new(path)
+}
+
+fn default_pio_path() -> PathBuf {
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|p| p.to_path_buf()))
+        .unwrap_or_else(|| PathBuf::from("."));
+    let name = if cfg!(windows) { "pio.exe" } else { "pio" };
+    exe_dir.join(name)
 }

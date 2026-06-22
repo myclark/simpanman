@@ -1,5 +1,4 @@
-#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
-
-fn main() {
-    simpanman_lib::run();
+#[tokio::main]
+async fn main() -> anyhow::Result<()> {
+    simpanman_lib::run().await
 }

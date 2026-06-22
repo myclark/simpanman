@@ -40,24 +40,16 @@ export default function TitleBar() {
           Open
         </button>
         {project && (
-          <>
-            <button
-              onClick={() => saveProject()}
-              className={`px-3 py-1 text-xs rounded border transition-colors ${
-                isDirty
-                  ? "bg-[#1f6feb] hover:bg-[#388bfd] border-[#388bfd] text-white"
-                  : "bg-[#21262d] hover:bg-[#30363d] border-[#30363d]"
-              }`}
-            >
-              Save
-            </button>
-            <button
-              onClick={() => saveProject(true)}
-              className="px-3 py-1 text-xs rounded bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] transition-colors"
-            >
-              Save As…
-            </button>
-          </>
+          <button
+            onClick={() => saveProject()}
+            className={`px-3 py-1 text-xs rounded border transition-colors ${
+              isDirty
+                ? "bg-[#1f6feb] hover:bg-[#388bfd] border-[#388bfd] text-white"
+                : "bg-[#21262d] hover:bg-[#30363d] border-[#30363d]"
+            }`}
+          >
+            Save
+          </button>
         )}
       </div>
     </header>

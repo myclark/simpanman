@@ -1,6 +1,5 @@
 import { create } from "zustand";
-import { open, save } from "@tauri-apps/plugin-dialog";
-import { tauriApi } from "@/lib/tauri";
+import { api } from "@/lib/api";
 import type {
   Board,
   BuildLogLine,
@@ -30,7 +29,7 @@ interface ProjectStore {
   // File operations
   newProject: (name: string) => Promise<void>;
   openProject: () => Promise<void>;
-  saveProject: (saveAs?: boolean) => Promise<void>;
+  saveProject: () => Promise<void>;
 
   // Mutations (return updated project from backend)
   upsertPanel: (panel: Panel) => Promise<void>;
@@ -73,7 +72,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   newProject: async (name) => {
     try {
-      const project = await tauriApi.projectNew(name);
+      const project = await api.projectNew(name);
       set({ project, isDirty: false, currentPath: null, validationReport: null, pinMaps: {} });
       await get().refreshAllPinMaps();
     } catch (e) {
@@ -83,35 +82,33 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   openProject: async () => {
     try {
-      const path = await open({
-        title: "Open Project",
-        filters: [{ name: "Sim Panel Manager", extensions: ["spm"] }],
+      const file = await pickFile();
+      if (!file) return;
+      const content = await file.text();
+      const project = await api.projectOpen(content);
+      // currentPath holds the chosen filename for the Save default name; there
+      // is no real filesystem path in the browser-native model.
+      set({
+        project,
+        isDirty: false,
+        currentPath: file.name,
+        validationReport: null,
+        pinMaps: {},
       });
-      if (!path || typeof path !== "string") return;
-      const project = await tauriApi.projectOpen(path);
-      set({ project, isDirty: false, currentPath: path, validationReport: null, pinMaps: {} });
       await Promise.all([get().revalidate(), get().refreshAllPinMaps()]);
     } catch (e) {
       set({ error: String(e) });
     }
   },
 
-  saveProject: async (saveAs = false) => {
-    const { project, currentPath } = get();
+  saveProject: async () => {
+    const { project } = get();
     if (!project) return;
     try {
-      let path = currentPath;
-      if (!path || saveAs) {
-        const chosen = await save({
-          title: "Save Project",
-          defaultPath: `${project.name}.spm`,
-          filters: [{ name: "Sim Panel Manager", extensions: ["spm"] }],
-        });
-        if (!chosen) return;
-        path = chosen;
-      }
-      await tauriApi.projectSave(path!, project);
-      set({ isDirty: false, currentPath: path });
+      const json = await api.projectSerialize(project);
+      const filename = `${project.name}.spm`;
+      downloadFile(filename, json);
+      set({ isDirty: false, currentPath: filename });
     } catch (e) {
       set({ error: String(e) });
     }
@@ -121,7 +118,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const updated = await tauriApi.panelUpsert(project, panel);
+      const updated = await api.panelUpsert(project, panel);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
     } catch (e) {
@@ -133,7 +130,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const updated = await tauriApi.panelDelete(project, id);
+      const updated = await api.panelDelete(project, id);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
     } catch (e) {
@@ -145,7 +142,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const updated = await tauriApi.boardUpsert(project, board);
+      const updated = await api.boardUpsert(project, board);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
       await get().refreshPinMap(board.id);
@@ -158,7 +155,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const updated = await tauriApi.boardDelete(project, id);
+      const updated = await api.boardDelete(project, id);
       const pinMaps = { ...get().pinMaps };
       delete pinMaps[id];
       set({ project: updated, isDirty: true, pinMaps });
@@ -172,7 +169,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const updated = await tauriApi.controlUpsert(project, control);
+      const updated = await api.controlUpsert(project, control);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
       await get().refreshPinMap(control.boardId);
@@ -186,7 +183,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (!project) return;
     const control = project.controls.find((c) => c.id === id);
     try {
-      const updated = await tauriApi.controlDelete(project, id);
+      const updated = await api.controlDelete(project, id);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
       if (control) await get().refreshPinMap(control.boardId);
@@ -199,7 +196,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const report = await tauriApi.validate(project);
+      const report = await api.validate(project);
       set({ validationReport: report });
     } catch (e) {
       console.warn("Validation failed:", e);
@@ -210,7 +207,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const map = await tauriApi.boardPinmap(project, boardId);
+      const map = await api.boardPinmap(project, boardId);
       set((s) => ({ pinMaps: { ...s.pinMaps, [boardId]: map } }));
     } catch (e) {
       console.warn("Pin map refresh failed:", e);
@@ -227,7 +224,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project } = get();
     if (!project) return;
     try {
-      const [updated] = await tauriApi.allocateIdentity(project, boardId);
+      const [updated] = await api.allocateIdentity(project, boardId);
       set({ project: updated, isDirty: true });
     } catch (e) {
       set({ error: String(e) });
@@ -236,7 +233,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   listPorts: async () => {
     try {
-      const ports = await tauriApi.listSerialPorts();
+      const ports = await api.listSerialPorts();
       set({ serialPorts: ports });
     } catch (e) {
       console.warn("Port list failed:", e);
@@ -251,7 +248,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       buildStatus: { ...s.buildStatus, [boardId]: "building" },
     }));
     try {
-      await tauriApi.buildBoard(project, boardId, port);
+      await api.buildBoard(project, boardId, port);
     } catch (e) {
       set((s) => ({
         buildStatus: { ...s.buildStatus, [boardId]: "error" },
@@ -287,4 +284,28 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 function scheduleRevalidate(get: () => ProjectStore) {
   if (revalidateTimer) clearTimeout(revalidateTimer);
   revalidateTimer = setTimeout(() => get().revalidate(), 300);
+}
+
+/// Prompt the user for a `.spm` file via a hidden file input.
+function pickFile(): Promise<File | null> {
+  return new Promise((resolve) => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".spm,application/json";
+    input.onchange = () => resolve(input.files?.[0] ?? null);
+    // If the picker is dismissed, the change event never fires; that's fine —
+    // the promise simply stays pending and is GC'd with the input.
+    input.click();
+  });
+}
+
+/// Trigger a browser download of `content` as `filename`.
+function downloadFile(filename: string, content: string) {
+  const blob = new Blob([content], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }

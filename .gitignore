@@ -44,6 +44,10 @@ logs
 node_modules
 bower_components
 
+# Vite frontend build output and release packaging
+dist/
+dist-pkg/
+
 *.sublime*
 
 psd
