@@ -65,8 +65,9 @@ test: ## Run Rust tests and the TypeScript type check
 	cargo test --manifest-path $(MANIFEST)
 	npx tsc --noEmit
 
-lint: ## Run clippy (warnings as errors) and the TypeScript type check
+lint: ## Run clippy, ESLint (React hooks), and the TypeScript type check
 	cargo clippy --all-targets --manifest-path $(MANIFEST) -- -D warnings
+	npm run lint
 	npx tsc --noEmit
 
 fmt: ## Format Rust code

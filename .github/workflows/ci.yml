@@ -46,6 +46,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Lint (ESLint — React Rules of Hooks)
+        run: npm run lint
+
       - name: TypeScript check
         run: npx tsc --noEmit
 
