@@ -35,11 +35,8 @@ test("clicking Test tab activates it", async ({ page }) => {
   await expect(testTab).toHaveClass(/border-\[#58a6ff\]/);
 });
 
-test("switching tabs preserves project state", async ({ page }) => {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const fc = await chooser;
-  await fc.setFiles(F5E_SPM);
+test("switching tabs preserves project state", async ({ page, openProject }) => {
+  await openProject(F5E_SPM);
   await expect(page.getByText("F-5E Armament Panel")).toBeVisible();
 
   // Switch to Boards and back to Controls — dispatchEvent avoids coordinate-intercept hang

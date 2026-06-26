@@ -3,74 +3,71 @@ import type {
   BoardIdentity,
   Control,
   GeneratedProject,
+  OpenedProject,
   Panel,
   PinMap,
   Project,
+  SavedProject,
   SerialPort,
   ValidationReport,
 } from "@/types";
 
-/// Call a backend command over HTTP. Mirrors the old Tauri `invoke` contract:
-/// resolves with the JSON result, or rejects with the server's error text.
-async function post<T>(name: string, body?: unknown): Promise<T> {
-  const res = await fetch(`/api/${name}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: body === undefined ? undefined : JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(text || `${name} failed (${res.status})`);
-  }
-  const contentType = res.headers.get("content-type") ?? "";
-  if (contentType.includes("application/json")) {
-    return (await res.json()) as T;
-  }
-  return undefined as T;
-}
+// Thin pass-through to the Electron preload bridge (window.api). Keeps the same
+// method surface the store/views were written against; the transport is now IPC
+// to the main-process engine + native helper instead of HTTP/WebSocket.
+const bridge = () => window.api;
 
 export const api = {
-  projectNew: (name: string) => post<Project>("project_new", { name }),
+  projectNew: (name: string): Promise<Project> => bridge().projectNew(name),
 
-  // Browser-native open: the frontend reads the file and sends its contents.
-  projectOpen: (content: string) => post<Project>("project_open", { content }),
+  // Native open dialog: main process reads + parses the chosen file.
+  openProjectDialog: (): Promise<OpenedProject | null> =>
+    bridge().openProjectDialog(),
 
-  // Browser-native save: backend returns canonical JSON to download as a Blob.
-  projectSerialize: (project: Project) =>
-    post<string>("project_serialize", { project }),
+  // Native save dialog (path === null → Save As); returns the written path.
+  saveProject: (project: Project, path: string | null): Promise<SavedProject | null> =>
+    bridge().saveProject(project, path),
 
-  panelUpsert: (project: Project, panel: Panel) =>
-    post<Project>("panel_upsert", { project, panel }),
+  projectSerialize: (project: Project): Promise<string> =>
+    bridge().projectSerialize(project),
 
-  panelDelete: (project: Project, panelId: string) =>
-    post<Project>("panel_delete", { project, panelId }),
+  panelUpsert: (project: Project, panel: Panel): Promise<Project> =>
+    bridge().panelUpsert(project, panel),
 
-  boardUpsert: (project: Project, board: Board) =>
-    post<Project>("board_upsert", { project, board }),
+  panelDelete: (project: Project, panelId: string): Promise<Project> =>
+    bridge().panelDelete(project, panelId),
 
-  boardDelete: (project: Project, boardId: string) =>
-    post<Project>("board_delete", { project, boardId }),
+  boardUpsert: (project: Project, board: Board): Promise<Project> =>
+    bridge().boardUpsert(project, board),
 
-  controlUpsert: (project: Project, control: Control) =>
-    post<Project>("control_upsert", { project, control }),
+  boardDelete: (project: Project, boardId: string): Promise<Project> =>
+    bridge().boardDelete(project, boardId),
 
-  controlDelete: (project: Project, controlId: string) =>
-    post<Project>("control_delete", { project, controlId }),
+  controlUpsert: (project: Project, control: Control): Promise<Project> =>
+    bridge().controlUpsert(project, control),
 
-  validate: (project: Project) =>
-    post<ValidationReport>("validate", { project }),
+  controlDelete: (project: Project, controlId: string): Promise<Project> =>
+    bridge().controlDelete(project, controlId),
 
-  boardPinmap: (project: Project, boardId: string) =>
-    post<PinMap>("board_pinmap", { project, boardId }),
+  validate: (project: Project): Promise<ValidationReport> =>
+    bridge().validate(project),
 
-  allocateIdentity: (project: Project, boardId: string) =>
-    post<[Project, BoardIdentity]>("allocate_identity", { project, boardId }),
+  boardPinmap: (project: Project, boardId: string): Promise<PinMap> =>
+    bridge().boardPinmap(project, boardId),
 
-  generateBoard: (project: Project, boardId: string) =>
-    post<GeneratedProject>("generate_board", { project, boardId }),
+  allocateIdentity: (
+    project: Project,
+    boardId: string,
+  ): Promise<[Project, BoardIdentity]> => bridge().allocateIdentity(project, boardId),
 
-  listSerialPorts: () => post<SerialPort[]>("list_serial_ports"),
+  generateBoard: (project: Project, boardId: string): Promise<GeneratedProject> =>
+    bridge().generateBoard(project, boardId),
 
-  buildBoard: (project: Project, boardId: string, port: string | null) =>
-    post<void>("build_board", { project, boardId, port }),
+  listSerialPorts: (): Promise<SerialPort[]> => bridge().listSerialPorts(),
+
+  buildBoard: (
+    project: Project,
+    boardId: string,
+    port: string | null,
+  ): Promise<void> => bridge().buildBoard(project, boardId, port),
 };

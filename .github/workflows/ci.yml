@@ -6,8 +6,8 @@ on:
     branches: [main]
 
 jobs:
-  rust:
-    name: Rust tests & lint
+  helper:
+    name: Rust helper build & lint
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -21,58 +21,66 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "server -> target"
+          workspaces: "helper -> target"
 
       - name: Cargo check
-        run: cargo check --manifest-path server/Cargo.toml
+        run: cargo check --manifest-path helper/Cargo.toml
 
       - name: Clippy
-        run: cargo clippy --manifest-path server/Cargo.toml -- -D warnings
+        run: cargo clippy --all-targets --manifest-path helper/Cargo.toml -- -D warnings
 
-      - name: Tests
-        run: cargo test --manifest-path server/Cargo.toml
-
-  frontend:
-    name: Frontend build
+  engine:
+    name: Engine unit tests (vitest)
     runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-
       - run: npm ci
+      - name: Engine tests
+        run: npm run test
 
+  frontend:
+    name: Frontend build & typecheck
+    runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
       - name: Lint (ESLint — React Rules of Hooks)
         run: npm run lint
-
-      - name: TypeScript check
-        run: npx tsc --noEmit
-
-      - name: Vite build
-        run: npm run build
+      - name: Type check (renderer + electron)
+        run: npm run typecheck
+      - name: Build renderer
+        run: npm run build:renderer
+      - name: Build Electron main + preload
+        run: npm run build:electron
 
   e2e:
     name: Playwright E2E tests
     runs-on: ubuntu-latest
+    env:
+      ELECTRON_SKIP_BINARY_DOWNLOAD: "1"
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: npm
-
       - run: npm ci
-
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
-
       - name: Run E2E tests
         run: npm run test:e2e
-
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
         if: failure()
@@ -80,3 +88,32 @@ jobs:
           name: playwright-report
           path: playwright-report/
           retention-days: 7
+
+  electron-smoke:
+    name: Electron smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y libudev-dev
+
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: "helper -> target"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+
+      - name: Build app + helper
+        run: |
+          npm run build:renderer
+          npm run build:electron
+          cargo build --release --manifest-path helper/Cargo.toml
+
+      - name: Run Electron smoke test (xvfb)
+        run: xvfb-run -a npm run test:smoke

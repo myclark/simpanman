@@ -1,0 +1,32 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`codegen > produces a board.json snapshot for the F-5E board 1`] = `
+"{
+  "build": {
+    "core": "arduino",
+    "f_cpu": "16000000L",
+    "hwids": [
+      ["0x1209", "0x0001"]
+    ],
+    "mcu": "atmega32u4",
+    "variant": "leonardo",
+    "usb_product": "F5E Armament",
+    "vid": "0x1209",
+    "pid": "0x0001"
+  },
+  "frameworks": ["arduino"],
+  "name": "Armament (SPM Custom)",
+  "upload": {
+    "maximum_ram_size": 2560,
+    "maximum_size": 28672,
+    "protocol": "avr109",
+    "require_upload_port": true,
+    "use_1200bps_touch": true,
+    "wait_for_upload_port": true,
+    "speed": 57600
+  },
+  "url": "https://github.com/myclark/simpanman",
+  "vendor": "Sim Panel Manager"
+}
+"
+`;

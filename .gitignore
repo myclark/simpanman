@@ -44,9 +44,13 @@ logs
 node_modules
 bower_components
 
-# Vite frontend build output and release packaging
+# Vite frontend build output, Electron bundles, and packaging
 dist/
 dist-pkg/
+dist-electron/
+release/
+# Staged native binaries for electron-builder extraResources (produced in CI)
+build/bin/
 
 *.sublime*
 
