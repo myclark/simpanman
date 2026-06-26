@@ -70,4 +70,8 @@ Cargo.lock
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
 
+# Playwright test artifacts
+test-results/
+playwright-report/
+
 # End of https://www.toptal.com/developers/gitignore/api/macos,react,rust

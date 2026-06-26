@@ -1,16 +1,15 @@
-# Sim Panel Manager — developer & user task runner.
+# Sim Panel Manager — developer task runner.
 #
-# The app is a local Rust server (axum) that serves a React UI in your browser.
-# In development you run TWO processes: the Rust API server AND the Vite dev
-# server (which proxies /api to the Rust server). `make dev` starts both.
+# The app is an axum API server (server/) + React/Vite frontend. In development
+# run TWO processes: the Rust API server AND the Vite dev server (which proxies
+# /api to the Rust server). `make dev` starts both together.
 #
 # Run `make` or `make help` to list the available targets.
 
-MANIFEST := src-tauri/Cargo.toml
-BIN      := src-tauri/target/release/simpanman
+MANIFEST := server/Cargo.toml
+BIN      := server/target/release/simpanman
 
-# Point this at your local PlatformIO CLI to enable firmware build/upload from
-# the app (e.g. `make run SIMPANMAN_PIO=$(command -v pio)`).
+# Point this at your local PlatformIO CLI to enable firmware build/upload.
 SIMPANMAN_PIO ?=
 export SIMPANMAN_PIO
 
@@ -28,6 +27,7 @@ help: ## Show this help
 
 install: ## Install frontend deps and pre-fetch Rust crates
 	npm install
+	npx playwright install chromium
 	cargo fetch --manifest-path $(MANIFEST)
 
 # ── Development (two processes) ───────────────────────────────────────────────
@@ -40,7 +40,7 @@ dev: ## Run the API server + Vite dev server together (Ctrl-C stops both)
 		npm run dev & \
 		wait
 
-dev-server: ## Run ONLY the Rust API server (API-only, no static UI, no browser)
+dev-server: ## Run ONLY the Rust API server (API-only, no static UI)
 	SIMPANMAN_DIST= cargo run --manifest-path $(MANIFEST)
 
 dev-web: ## Run ONLY the Vite dev server (needs the API server running too)
@@ -61,9 +61,10 @@ run: build-web ## Build the UI, then run the server (serves dist/ and opens your
 
 # ── Quality ───────────────────────────────────────────────────────────────────
 
-test: ## Run Rust tests and the TypeScript type check
+test: ## Run Rust tests, TypeScript type check, and Playwright E2E tests
 	cargo test --manifest-path $(MANIFEST)
 	npx tsc --noEmit
+	npm run test:e2e
 
 lint: ## Run clippy, ESLint (React hooks), and the TypeScript type check
 	cargo clippy --all-targets --manifest-path $(MANIFEST) -- -D warnings
@@ -73,6 +74,6 @@ lint: ## Run clippy, ESLint (React hooks), and the TypeScript type check
 fmt: ## Format Rust code
 	cargo fmt --manifest-path $(MANIFEST)
 
-clean: ## Remove build artifacts (cargo target/ and dist/)
+clean: ## Remove build artifacts
 	cargo clean --manifest-path $(MANIFEST)
-	rm -rf dist
+	rm -rf dist playwright-report test-results
