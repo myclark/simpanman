@@ -30,14 +30,16 @@ pins, generate per-board firmware, give each board a stable USB identity, and up
 
 | Layer | Choice | Notes |
 |---|---|---|
-| Shell | **Local Rust server (axum) + system browser** | No embedded webview (avoids the macOS 26 `WKWebView` crash); the binary serves the UI on `127.0.0.1` and opens the default browser. |
-| Frontend | **React + TypeScript + Vite** | Use **TanStack Table** (+ optional TanStack Virtual) for the grid. State via Zustand or React Query; styling Tailwind. Served as static files by the Rust server. |
-| Backend | **Rust** (`axum` HTTP `/api` routes) | Owns model validation, codegen, pin allocation, board I/O, build orchestration. |
-| Templating | **minijinja** (Rust) | Firmware templates embedded via `rust-embed` / `include_str!`. |
-| Toolchain | **PlatformIO Core** bundled alongside the server binary | Pin a version; ship per-target binary, resolved next to the executable (`SIMPANMAN_PIO` overrides). Do not install at runtime. |
-| Device read (test view) | **hidapi** or **gilrs** crate | Read HID joystick reports to reflect live control state. |
+| Shell | **Electron** (native window) | A real desktop app — no system browser, no user-visible web server. `contextIsolation` on, `nodeIntegration` off; the renderer talks to the main process over a `contextBridge` preload (`window.api`). |
+| Frontend | **React + TypeScript + Vite** | **TanStack Table** (+ optional TanStack Virtual) for the grid; state via Zustand; styling Tailwind. Loaded from `dist/` over `file://` in the packaged app. |
+| Engine | **TypeScript in the Electron main process** | The former Rust backend, ported 1:1: model validation, codegen, pin allocation, identity/PID registry, project parse/serialize/migrate. Invoked over IPC. |
+| Native helper | **Rust CLI sidecar** (`helper/`) | A small `simpanman-helper` binary for the genuinely-hard native bits: serial-port enumeration, the 32u4 1200-baud bootloader touch, and PlatformIO build/upload. Spawned per-operation; build progress streamed back as NDJSON. Keeping serial/HID in a standalone binary avoids Electron native-module rebuild pain. |
+| Templating | **nunjucks** (JS, Jinja2-compatible) | Firmware templates inlined as string constants in the engine so they bundle cleanly. |
+| Toolchain | **PlatformIO Core** bundled in app resources | Pin a version; the helper resolves it via `SIMPANMAN_PIO` (the app sets it to the bundled binary). Do not install at runtime. |
+| Auto-update | **electron-updater + GitHub Releases** | Background download, install-on-quit; update status surfaced to the renderer. |
+| Device read (test view) | **hidapi** crate (helper) | Read HID joystick reports to reflect live control state (Phase 3, behind the `hid` feature). |
 
-Targets: **Windows** (required — the sim PC) and **macOS** (development/use). Keep all
+Targets: **Windows** (required — the sim PC), **macOS**, and **Linux**. Keep all
 platform-specific code (serial port enumeration, sidecar paths) behind small abstractions.
 
 ---
@@ -45,24 +47,28 @@ platform-specific code (serial port enumeration, sidecar paths) behind small abs
 ## 3. Architecture
 
 ```
-React UI (grid-first, runs in the system browser)
-  │  HTTP POST /api/<command>  +  /api/events WebSocket
+React UI (grid-first, Electron renderer)
+  │  window.api.<command>   (contextBridge preload → ipcRenderer.invoke)
   ▼
-Rust server (axum, 127.0.0.1)
-  ├─ Model store        (parse/serialize project, validation)
-  ├─ Pin allocator      (per-board pin map, conflict detection)
-  ├─ Codegen            (minijinja → .ino + platformio.ini per board)
-  ├─ Identity registry  (panel/board → assigned PID + USB product string)
-  ├─ Build runner       (spawn pio process, stream stdout/stderr as events)
-  └─ Device reader      (HID read for live test view)
+Electron main process (TypeScript)
+  ├─ Engine (ported from Rust):
+  │    ├─ Model store        (parse/serialize project, validation, migrations)
+  │    ├─ Pin allocator      (per-board pin map, conflict detection)
+  │    ├─ Codegen            (nunjucks → main.cpp + platformio.ini + board.json)
+  │    └─ Identity registry  (board → assigned PID + USB product string)
+  ├─ Native dialogs          (open/save .spm via OS file pickers)
+  └─ Helper bridge → spawns the Rust CLI sidecar:
+       ├─ list-ports         (serial enumeration)
+       ├─ build              (1200-baud touch + pio build/upload, NDJSON stream)
+       └─ read-device        (HID read for live test view — Phase 3)
   │
   ▼
 PlatformIO Core (bundled binary)  →  avr toolchain  →  board over USB
 ```
 
-Long-running operations (build/upload, device polling) run async and broadcast events
-(`build://log`, `build://status`, `device://state`) over the `/api/events` WebSocket,
-which the UI subscribes to.
+Build progress (`build:log`, `build:status`) is pushed from the main process back to
+the renderer over IPC; the helper streams its own NDJSON events to the main process,
+which forwards them. Auto-update status (`update:status`) is broadcast the same way.
 
 ---
 
@@ -291,21 +297,32 @@ All editing is driven by the model; validation errors shown inline and aggregate
 
 ```
 /                       (project root)
-  src/                  React + TS (grid, boards, build, test views)
-    lib/api.ts          HTTP client for the /api routes
-    lib/events.ts       /api/events WebSocket client
-  src-tauri/            Rust server crate (name retained for path stability)
-    src/
-      model/            entities, (de)serialization, validation, migrations
-      pins/             board profiles + allocator
-      codegen/          minijinja render, project emitter
-      identity/         PID/product registry
-      build/            pio process runner, port detection, 1200-baud reset
-      device/           HID reader for test view
-      commands.rs       command implementations (called by the HTTP layer)
-      server.rs         axum router, /api routes, build-event WebSocket
-    templates/          minijinja firmware templates (embedded)
-    binaries/           pinned PlatformIO binary per target triple
+  src/                  React + TS renderer (grid, boards, build, test views)
+    lib/api.ts          thin wrapper over the window.api preload bridge
+    lib/events.ts       build log/status IPC subscriptions
+    types/index.ts      shared domain + ElectronApi types (renderer ↔ preload)
+  electron/             Electron main process (TypeScript)
+    main.ts             app lifecycle + BrowserWindow
+    preload.ts          contextBridge → window.api
+    ipc.ts              IPC handlers (engine + native dialogs + build)
+    helper.ts           bridge to the Rust helper (spawn + NDJSON parse)
+    updater.ts          electron-updater wiring
+    build.mjs           esbuild bundler for main/preload
+    engine/             ported pure logic
+      model.ts          new/parse/serialize/migrate
+      validation.ts     validation report
+      pins.ts           board profiles + allocator
+      buttonIndex.ts    stable joystick-button assignment
+      render.ts         nunjucks context + render
+      emitter.ts        GeneratedProject files + temp-dir emission
+      identity.ts       PID/product registry
+      templates.ts      inlined firmware templates (nunjucks)
+  helper/               Rust CLI sidecar crate
+    src/main.rs         list-ports / build subcommands
+    src/build/          ports, bootloader (1200-baud), pio runner
+  electron-builder.yml  packaging + GitHub Releases publish config
+  tests/engine/         vitest engine unit/snapshot tests
+  tests/e2e/            Playwright UI tests (window.api mocked)
   docs/                 this spec, schema docs
 ```
 
@@ -313,8 +330,9 @@ All editing is driven by the model; validation errors shown inline and aggregate
 
 ## 12. Command surface (indicative)
 
-Each command is a `POST /api/<name>` route taking a JSON body and returning JSON
-(errors as `400` text). The build stream is delivered over the `/api/events` WebSocket.
+Each command is an IPC channel exposed on `window.api` by the preload bridge and
+handled in the main process (`ipcMain.handle`), taking/returning structured-clone
+JSON. The build stream is pushed back over the `build:log` / `build:status` channels.
 
 ```
 project_new(name) -> Project

@@ -82,16 +82,12 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 
   openProject: async () => {
     try {
-      const file = await pickFile();
-      if (!file) return;
-      const content = await file.text();
-      const project = await api.projectOpen(content);
-      // currentPath holds the chosen filename for the Save default name; there
-      // is no real filesystem path in the browser-native model.
+      const opened = await api.openProjectDialog();
+      if (!opened) return; // dialog cancelled
       set({
-        project,
+        project: opened.project,
         isDirty: false,
-        currentPath: file.name,
+        currentPath: opened.path,
         validationReport: null,
         pinMaps: {},
       });
@@ -102,13 +98,13 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   },
 
   saveProject: async () => {
-    const { project } = get();
+    const { project, currentPath } = get();
     if (!project) return;
     try {
-      const json = await api.projectSerialize(project);
-      const filename = `${project.name}.spm`;
-      downloadFile(filename, json);
-      set({ isDirty: false, currentPath: filename });
+      // Save to the known path, or prompt (Save As) when there isn't one yet.
+      const saved = await api.saveProject(project, currentPath);
+      if (!saved) return; // dialog cancelled
+      set({ isDirty: false, currentPath: saved.path });
     } catch (e) {
       set({ error: String(e) });
     }
@@ -284,28 +280,4 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
 function scheduleRevalidate(get: () => ProjectStore) {
   if (revalidateTimer) clearTimeout(revalidateTimer);
   revalidateTimer = setTimeout(() => get().revalidate(), 300);
-}
-
-/// Prompt the user for a `.spm` file via a hidden file input.
-function pickFile(): Promise<File | null> {
-  return new Promise((resolve) => {
-    const input = document.createElement("input");
-    input.type = "file";
-    input.accept = ".spm,application/json";
-    input.onchange = () => resolve(input.files?.[0] ?? null);
-    // If the picker is dismissed, the change event never fires; that's fine —
-    // the promise simply stays pending and is GC'd with the input.
-    input.click();
-  });
-}
-
-/// Trigger a browser download of `content` as `filename`.
-function downloadFile(filename: string, content: string) {
-  const blob = new Blob([content], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  URL.revokeObjectURL(url);
 }

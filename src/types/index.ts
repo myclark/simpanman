@@ -124,6 +124,7 @@ export type ValidationError = {
   pin?: string;
   controlIds?: string[];
   controlId?: string;
+  panelId?: string;
   positionLabel?: string;
 };
 
@@ -174,3 +175,61 @@ export type BuildLogLine = {
   isErr: boolean;
   timestamp: number;
 };
+
+// ── Auto-update status (electron-updater, surfaced over IPC) ───────────────────
+
+export type UpdateStatus =
+  | { state: "available"; version: string }
+  | { state: "downloading"; percent: number }
+  | { state: "downloaded"; version: string }
+  | { state: "error"; message: string };
+
+// ── Preload bridge contract (window.api) ──────────────────────────────────────
+// Implemented in electron/preload.ts, consumed by src/lib/*. Single source of
+// truth so the main-process bridge and the renderer cannot drift.
+
+export type OpenedProject = { project: Project; path: string };
+export type SavedProject = { path: string };
+
+export interface ElectronApi {
+  // Project file operations (native dialogs handled in the main process).
+  projectNew(name: string): Promise<Project>;
+  projectSerialize(project: Project): Promise<string>;
+  openProjectDialog(): Promise<OpenedProject | null>;
+  saveProject(project: Project, path: string | null): Promise<SavedProject | null>;
+
+  // Model mutations.
+  panelUpsert(project: Project, panel: Panel): Promise<Project>;
+  panelDelete(project: Project, panelId: string): Promise<Project>;
+  boardUpsert(project: Project, board: Board): Promise<Project>;
+  boardDelete(project: Project, boardId: string): Promise<Project>;
+  controlUpsert(project: Project, control: Control): Promise<Project>;
+  controlDelete(project: Project, controlId: string): Promise<Project>;
+
+  // Derived data.
+  validate(project: Project): Promise<ValidationReport>;
+  boardPinmap(project: Project, boardId: string): Promise<PinMap>;
+  allocateIdentity(project: Project, boardId: string): Promise<[Project, BoardIdentity]>;
+  generateBoard(project: Project, boardId: string): Promise<GeneratedProject>;
+
+  // Native helper (serial + PlatformIO build/upload).
+  listSerialPorts(): Promise<SerialPort[]>;
+  buildBoard(project: Project, boardId: string, port: string | null): Promise<void>;
+
+  // Build event subscriptions (return an unsubscribe fn).
+  onBuildLog(cb: (e: BuildLogEvent) => void): () => void;
+  onBuildStatus(cb: (e: BuildStatusEvent) => void): () => void;
+
+  // Auto-update.
+  onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;
+  installUpdate(): Promise<void>;
+
+  // App metadata.
+  appVersion(): Promise<string>;
+}
+
+declare global {
+  interface Window {
+    api: ElectronApi;
+  }
+}

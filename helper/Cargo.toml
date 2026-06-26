@@ -1,0 +1,34 @@
+[package]
+name = "simpanman-helper"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.77"
+
+[[bin]]
+name = "simpanman-helper"
+path = "src/main.rs"
+
+# Native sidecar CLI for the Electron app: serial-port enumeration, the 32u4
+# 1200-baud bootloader touch, and PlatformIO build/upload orchestration. All the
+# pure project logic (model, validation, codegen, pins, identity) lives in the
+# TypeScript engine in the Electron main process — this binary only does the
+# things that need real hardware / external-process access.
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+serialport = "4"
+anyhow = "1"
+
+# HID device reader for the test view (Phase 3, opt-in).
+hidapi = { version = "2", optional = true }
+
+[features]
+default = []
+hid = ["dep:hidapi"]
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

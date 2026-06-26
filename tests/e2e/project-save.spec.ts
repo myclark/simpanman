@@ -18,21 +18,15 @@ test("Save button appears after New Project is created", async ({ page }) => {
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
 });
 
-test("no dirty indicator when project first opened", async ({ page }) => {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const fc = await chooser;
-  await fc.setFiles(F5E_SPM);
+test("no dirty indicator when project first opened", async ({ page, openProject }) => {
+  await openProject(F5E_SPM);
   await expect(page.getByText("F-5E Armament Panel")).toBeVisible();
 
   await expect(page.locator('[title="Unsaved changes"]')).not.toBeVisible();
 });
 
-test("dirty indicator appears after a mutation (allocate identity)", async ({ page }) => {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const fc = await chooser;
-  await fc.setFiles(F5E_SPM);
+test("dirty indicator appears after a mutation (allocate identity)", async ({ page, openProject }) => {
+  await openProject(F5E_SPM);
   await expect(page.getByText("F-5E Armament Panel")).toBeVisible();
 
   await page.getByRole("button", { name: "Boards" }).click();
@@ -41,11 +35,8 @@ test("dirty indicator appears after a mutation (allocate identity)", async ({ pa
   await expect(page.locator('[title="Unsaved changes"]')).toBeVisible();
 });
 
-test("Save button is highlighted blue when project is dirty", async ({ page }) => {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const fc = await chooser;
-  await fc.setFiles(F5E_SPM);
+test("Save button is highlighted blue when project is dirty", async ({ page, openProject }) => {
+  await openProject(F5E_SPM);
   await expect(page.getByText("F-5E Armament Panel")).toBeVisible();
 
   // Make project dirty via identity allocation
@@ -56,33 +47,16 @@ test("Save button is highlighted blue when project is dirty", async ({ page }) =
   await expect(saveBtn).toHaveClass(/bg-\[#1f6feb\]/);
 });
 
-test("clicking Save calls project_serialize API", async ({ page }) => {
-  let serializeCalled = false;
-  await page.route("/api/project_serialize", async (route) => {
-    serializeCalled = true;
-    const body = (await route.request().postDataJSON()) as { project: unknown };
-    await route.fulfill({
-      status: 200,
-      contentType: "text/plain",
-      body: JSON.stringify(body.project),
-    });
-  });
-
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const fc = await chooser;
-  await fc.setFiles(F5E_SPM);
+test("clicking Save invokes the save bridge", async ({ page, openProject, mock }) => {
+  await openProject(F5E_SPM);
   await expect(page.getByText("F-5E Armament Panel")).toBeVisible();
 
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(serializeCalled).toBe(true);
+  await expect.poll(() => mock.saveCalls()).toBeGreaterThan(0);
 });
 
-test("dirty indicator disappears after saving", async ({ page }) => {
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Open", exact: true }).click();
-  const fc = await chooser;
-  await fc.setFiles(F5E_SPM);
+test("dirty indicator disappears after saving", async ({ page, openProject }) => {
+  await openProject(F5E_SPM);
   await expect(page.getByText("F-5E Armament Panel")).toBeVisible();
 
   // Make dirty

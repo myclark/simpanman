@@ -15,25 +15,17 @@ jobs:
       matrix:
         include:
           - platform: windows-latest
-            target: x86_64-pc-windows-msvc
             pio_suffix: windows-x86_64.exe
-            bin: simpanman.exe
+            helper_bin: simpanman-helper.exe
             pio_name: pio.exe
-            archive: zip
-
           - platform: ubuntu-22.04
-            target: x86_64-unknown-linux-gnu
             pio_suffix: linux-x86_64
-            bin: simpanman
+            helper_bin: simpanman-helper
             pio_name: pio
-            archive: tar
-
           - platform: macos-latest
-            target: aarch64-apple-darwin
             pio_suffix: macos-arm64
-            bin: simpanman
+            helper_bin: simpanman-helper
             pio_name: pio
-            archive: tar
 
     runs-on: ${{ matrix.platform }}
 
@@ -42,12 +34,10 @@ jobs:
 
       - name: Install Rust stable
         uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: ${{ matrix.target }}
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: "src-tauri -> target"
+          workspaces: "helper -> target"
 
       - name: Install Node.js
         uses: actions/setup-node@v4
@@ -57,53 +47,40 @@ jobs:
 
       - name: Install Linux system deps
         if: startsWith(matrix.platform, 'ubuntu')
-        # libudev is required by the `serialport` crate (no webview deps needed).
+        # libudev is required by the `serialport` crate.
         run: sudo apt-get update && sudo apt-get install -y libudev-dev
 
       - name: Install frontend deps
         run: npm ci
 
-      - name: Build frontend
-        run: npm run build
+      - name: Build renderer + Electron main/preload
+        run: |
+          npm run build:renderer
+          npm run build:electron
 
-      # Pinned PlatformIO standalone executable, bundled next to the server binary.
-      # At runtime the server resolves `pio`/`pio.exe` from its own directory.
+      - name: Build native helper
+        run: cargo build --release --manifest-path helper/Cargo.toml
+
+      # Stage the per-platform native binaries for electron-builder extraResources
+      # (electron-builder.yml copies build/bin → resources/helper in the package).
+      - name: Stage helper binary
+        shell: bash
+        run: |
+          mkdir -p build/bin
+          cp "helper/target/release/${{ matrix.helper_bin }}" "build/bin/"
+
       - name: Download PlatformIO
         shell: bash
         run: |
           PIO_VERSION="6.1.16"
           URL="https://github.com/platformio/platformio-core-installer/releases/download/${PIO_VERSION}/pioinstaller-${PIO_VERSION}-${{ matrix.pio_suffix }}"
           echo "Downloading ${URL}"
-          curl -fsSL "$URL" -o "${{ matrix.pio_name }}"
-          [[ "${{ matrix.platform }}" != "windows-latest" ]] && chmod +x "${{ matrix.pio_name }}" || true
+          curl -fsSL "$URL" -o "build/bin/${{ matrix.pio_name }}"
+          [[ "${{ matrix.platform }}" != "windows-latest" ]] && chmod +x "build/bin/${{ matrix.pio_name }}" || true
 
-      - name: Build server binary
-        run: cargo build --release --manifest-path src-tauri/Cargo.toml --target ${{ matrix.target }}
-
-      - name: Package
-        id: package
-        shell: bash
-        run: |
-          NAME="sim-panel-manager-${{ github.ref_name }}-${{ matrix.target }}"
-          mkdir -p "dist-pkg/$NAME"
-          cp "src-tauri/target/${{ matrix.target }}/release/${{ matrix.bin }}" "dist-pkg/$NAME/"
-          cp "${{ matrix.pio_name }}" "dist-pkg/$NAME/"
-          cp -r dist "dist-pkg/$NAME/dist"
-          cd dist-pkg
-          if [[ "${{ matrix.archive }}" == "zip" ]]; then
-            7z a "$NAME.zip" "$NAME" >/dev/null
-            echo "asset=dist-pkg/$NAME.zip" >> "$GITHUB_OUTPUT"
-          else
-            tar -czf "$NAME.tar.gz" "$NAME"
-            echo "asset=dist-pkg/$NAME.tar.gz" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Publish release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: "Sim Panel Manager ${{ github.ref_name }}"
-          body: "See the assets below to download this release. Unpack and run the `simpanman` executable; it serves the app in your browser."
-          draft: false
-          prerelease: false
-          files: ${{ steps.package.outputs.asset }}
+      - name: Build & publish installers
+        # electron-builder attaches installers + the latest*.yml update feeds to
+        # the GitHub Release matching this tag (consumed by electron-updater).
+        run: npx electron-builder --publish always
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

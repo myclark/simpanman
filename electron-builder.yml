@@ -1,0 +1,52 @@
+appId: com.myclark.simpanman
+productName: Sim Panel Manager
+copyright: Copyright © 2026 Sim Panel Manager
+
+directories:
+  output: release
+  buildResources: build
+
+# Only the built renderer, the bundled main/preload, and production deps ship.
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json
+  - "!**/*.map"
+
+# The native Rust helper + the bundled PlatformIO binary live outside the asar so
+# they remain executable. CI stages the per-platform binaries into build/bin/
+# before packaging (see .github/workflows/release.yml).
+extraResources:
+  - from: build/bin
+    to: helper
+
+asar: true
+
+# electron-updater feed — GitHub Releases.
+publish:
+  provider: github
+  owner: myclark
+  repo: simpanman
+
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # Unsigned for now; ad-hoc identity avoids a hard failure in CI. Document a
+  # path to a real Developer ID + notarization before public distribution.
+  identity: null
+
+win:
+  target:
+    - nsis
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+
+linux:
+  category: Development
+  target:
+    - AppImage

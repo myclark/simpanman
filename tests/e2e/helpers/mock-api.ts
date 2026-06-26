@@ -1,166 +1,189 @@
 import { test as base, expect } from "@playwright/test";
-import type { WebSocketRoute } from "@playwright/test";
-import type { Project } from "../../../src/types/index.js";
+import { readFileSync } from "node:fs";
+import type { Project, SerialPort, ValidationReport } from "../../../src/types/index.js";
 import { computePinMap } from "./project-fixtures.js";
 
+// The renderer talks to the Electron main process over the preload bridge
+// (window.api). In tests there is no main process, so we inject a stand-in
+// window.api whose data behavior mirrors the real engine's command surface.
+// State the tests need to drive/inspect (validation + port overrides, call
+// counters, the project the open-dialog returns) lives in this Node fixture and
+// is reached from the page via exposeFunction bindings.
+
+/** Handle for pushing build log/status events the way the main process would. */
 export interface WsHandle {
-  route: WebSocketRoute | null;
-  sendLog(boardId: string, line: string, isErr?: boolean): void;
-  sendStatus(boardId: string, success: boolean, exitCode?: number): void;
+  sendLog(boardId: string, line: string, isErr?: boolean): Promise<void>;
+  sendStatus(boardId: string, success: boolean, exitCode?: number): Promise<void>;
 }
 
-// Shared handle kept in module scope per test-worker. Safe because Playwright
-// runs each test in its own context and resets state between tests.
-function makeHandle(): WsHandle {
-  return {
-    route: null,
-    sendLog(boardId, line, isErr = false) {
-      this.route?.send(
-        JSON.stringify({ event: "build://log", payload: { boardId, line, isErr } }),
-      );
-    },
-    sendStatus(boardId, success, exitCode = success ? 0 : 1) {
-      this.route?.send(
-        JSON.stringify({ event: "build://status", payload: { boardId, success, exitCode } }),
-      );
-    },
-  };
+/** Test-side controls over the injected window.api. */
+export interface MockControl {
+  /** Prime the next openProjectDialog() to return this .spm file's contents. */
+  primeOpen(absPath: string): void;
+  /** Override the report validate() returns (defaults to clean). */
+  setValidate(report: ValidationReport): void;
+  /** Override the serial ports listSerialPorts() returns. */
+  setPorts(ports: SerialPort[]): void;
+  /** How many times listSerialPorts() has been invoked. */
+  portListCalls(): number;
+  /** How many times saveProject() has been invoked. */
+  saveCalls(): number;
 }
+
+const DEFAULT_PORTS: SerialPort[] = [
+  { name: "/dev/ttyACM0", description: "Arduino Leonardo" },
+  { name: "/dev/ttyACM1", description: "Arduino Micro" },
+];
 
 type Fixtures = {
-  // Auto-applied: HTTP API mocks + WebSocket mock, every test.
-  apiMocks: WsHandle;
-  // Convenience alias so tests can write `{ ws }` to get the WS handle.
+  mock: MockControl;
   ws: WsHandle;
+  openProject: (absPath: string, opener?: () => Promise<unknown>) => Promise<void>;
 };
 
 export const test = base.extend<Fixtures>({
-  // Both HTTP and WebSocket mocks run automatically for every test so that the
-  // WebSocket route is registered before page.goto("/") fires in beforeEach.
-  apiMocks: [
+  mock: [
     async ({ page }, use) => {
-      const handle = makeHandle();
+      // Node-side state the page reaches through exposeFunction.
+      let pendingOpen: { project: Project; path: string } | null = null;
+      let validateOverride: ValidationReport | null = null;
+      let portsOverride: SerialPort[] | null = null;
+      let portListCalls = 0;
+      let saveCalls = 0;
 
-      // WebSocket mock — always installed so the app never hits Vite's proxy.
-      await page.routeWebSocket(/\/api\/events$/, (ws) => {
-        handle.route = ws;
+      await page.exposeFunction("__spmOpen", () => {
+        const r = pendingOpen;
+        pendingOpen = null;
+        return r;
+      });
+      await page.exposeFunction("__spmSave", (_project: Project, path: string | null) => {
+        saveCalls += 1;
+        return { path: path ?? "/mock/saved.spm" };
+      });
+      await page.exposeFunction(
+        "__spmValidate",
+        (): ValidationReport => validateOverride ?? { errors: [], warnings: [] },
+      );
+      await page.exposeFunction("__spmPorts", (): SerialPort[] => {
+        portListCalls += 1;
+        return portsOverride ?? DEFAULT_PORTS;
+      });
+      await page.exposeFunction("__spmPinmap", (project: Project, boardId: string) =>
+        computePinMap(project, boardId),
+      );
+
+      // Install window.api before any page script runs.
+      await page.addInitScript(() => {
+        const w = window as unknown as Record<string, (...a: unknown[]) => unknown>;
+        const logCbs: ((e: unknown) => void)[] = [];
+        const statusCbs: ((e: unknown) => void)[] = [];
+        (window as unknown as Record<string, unknown>).__emitBuildLog = (e: unknown) =>
+          logCbs.forEach((cb) => cb(e));
+        (window as unknown as Record<string, unknown>).__emitBuildStatus = (e: unknown) =>
+          statusCbs.forEach((cb) => cb(e));
+
+        const sub = (arr: ((e: unknown) => void)[], cb: (e: unknown) => void) => {
+          arr.push(cb);
+          return () => {
+            const i = arr.indexOf(cb);
+            if (i >= 0) arr.splice(i, 1);
+          };
+        };
+
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (window as any).api = {
+          projectNew: (name: string) =>
+            Promise.resolve({ schemaVersion: 1, name, panels: [], boards: [], controls: [] }),
+          projectSerialize: (p: unknown) => Promise.resolve(JSON.stringify(p, null, 2)),
+          openProjectDialog: () => w.__spmOpen(),
+          saveProject: (p: unknown, path: unknown) => w.__spmSave(p, path),
+
+          // Mutations echo the project back (the store holds the source of truth;
+          // these UI tests don't assert on mutated content).
+          panelUpsert: (p: unknown) => Promise.resolve(p),
+          panelDelete: (p: unknown) => Promise.resolve(p),
+          boardUpsert: (p: unknown) => Promise.resolve(p),
+          boardDelete: (p: unknown) => Promise.resolve(p),
+          controlUpsert: (p: unknown) => Promise.resolve(p),
+          controlDelete: (p: unknown) => Promise.resolve(p),
+
+          validate: (p: unknown) => w.__spmValidate(p),
+          boardPinmap: (p: unknown, id: unknown) => w.__spmPinmap(p, id),
+          allocateIdentity: (p: { boards: { id: string; identity: object }[] }, id: string) => {
+            const boards = p.boards.map((b) =>
+              b.id === id ? { ...b, identity: { ...b.identity, usbPid: 0x0010 } } : b,
+            );
+            const updated = { ...p, boards };
+            const identity = boards.find((b) => b.id === id)!.identity;
+            return Promise.resolve([updated, identity]);
+          },
+          generateBoard: () => Promise.resolve({ boardId: "", files: [] }),
+
+          listSerialPorts: () => w.__spmPorts(),
+          buildBoard: () => Promise.resolve(),
+
+          onBuildLog: (cb: (e: unknown) => void) => sub(logCbs, cb),
+          onBuildStatus: (cb: (e: unknown) => void) => sub(statusCbs, cb),
+          onUpdateStatus: () => () => {},
+          installUpdate: () => Promise.resolve(),
+          appVersion: () => Promise.resolve("0.0.0-test"),
+        };
       });
 
-      // HTTP API mock
-      await page.route("**/api/**", async (route, request) => {
-        const url = request.url();
-        const endpoint = url.split("/api/")[1]?.split("?")[0] ?? "";
-        let body: Record<string, unknown> = {};
-        try {
-          body = (await request.postDataJSON()) as Record<string, unknown>;
-        } catch {
-          // ignore non-JSON or empty bodies
-        }
+      const control: MockControl = {
+        primeOpen(absPath) {
+          pendingOpen = {
+            project: JSON.parse(readFileSync(absPath, "utf8")) as Project,
+            path: absPath,
+          };
+        },
+        setValidate(report) {
+          validateOverride = report;
+        },
+        setPorts(ports) {
+          portsOverride = ports;
+        },
+        portListCalls: () => portListCalls,
+        saveCalls: () => saveCalls,
+      };
 
-        switch (endpoint) {
-          case "project_new": {
-            const name = (body.name as string) ?? "New Project";
-            const project: Project = {
-              schemaVersion: 1,
-              name,
-              panels: [],
-              boards: [],
-              controls: [],
-            };
-            await route.fulfill({ json: project });
-            break;
-          }
-
-          case "project_open": {
-            const content = (body.content as string) ?? "{}";
-            const project = JSON.parse(content) as Project;
-            await route.fulfill({ json: project });
-            break;
-          }
-
-          case "project_serialize": {
-            const project = body.project as Project;
-            await route.fulfill({
-              status: 200,
-              contentType: "text/plain",
-              body: JSON.stringify(project, null, 2),
-            });
-            break;
-          }
-
-          case "validate": {
-            await route.fulfill({ json: { errors: [], warnings: [] } });
-            break;
-          }
-
-          case "board_pinmap": {
-            const project = body.project as Project;
-            const boardId = body.boardId as string;
-            await route.fulfill({ json: computePinMap(project, boardId) });
-            break;
-          }
-
-          case "allocate_identity": {
-            const project = body.project as Project;
-            const boardId = body.boardId as string;
-            const updated: Project = {
-              ...project,
-              boards: project.boards.map((b) =>
-                b.id === boardId
-                  ? { ...b, identity: { ...b.identity, usbPid: 0x0010 } }
-                  : b,
-              ),
-            };
-            const newIdentity = updated.boards.find((b) => b.id === boardId)!.identity;
-            await route.fulfill({ json: [updated, newIdentity] });
-            break;
-          }
-
-          case "list_serial_ports": {
-            await route.fulfill({
-              json: [
-                { name: "/dev/ttyACM0", description: "Arduino Leonardo" },
-                { name: "/dev/ttyACM1", description: "Arduino Micro" },
-              ],
-            });
-            break;
-          }
-
-          case "build_board": {
-            await route.fulfill({ status: 200 });
-            break;
-          }
-
-          case "panel_upsert":
-          case "panel_delete":
-          case "board_upsert":
-          case "board_delete":
-          case "control_upsert":
-          case "control_delete": {
-            const project = (body.project as Project) ?? {
-              schemaVersion: 1,
-              name: "Project",
-              panels: [],
-              boards: [],
-              controls: [],
-            };
-            await route.fulfill({ json: project });
-            break;
-          }
-
-          default:
-            await route.fulfill({ status: 404, body: `Unknown endpoint: ${endpoint}` });
-        }
-      });
-
-      await use(handle);
+      await use(control);
     },
     { auto: true },
   ],
 
-  // Convenience fixture: just returns the WsHandle already created by apiMocks.
-  ws: async ({ apiMocks }, use) => {
-    await use(apiMocks);
+  ws: async ({ page }, use) => {
+    const handle: WsHandle = {
+      sendLog: (boardId, line, isErr = false) =>
+        page.evaluate(
+          ([b, l, e]) =>
+            (window as unknown as { __emitBuildLog: (x: unknown) => void }).__emitBuildLog({
+              boardId: b,
+              line: l,
+              isErr: e,
+            }),
+          [boardId, line, isErr] as [string, string, boolean],
+        ),
+      sendStatus: (boardId, success, exitCode = success ? 0 : 1) =>
+        page.evaluate(
+          ([b, s, c]) =>
+            (window as unknown as { __emitBuildStatus: (x: unknown) => void }).__emitBuildStatus({
+              boardId: b,
+              success: s,
+              exitCode: c,
+            }),
+          [boardId, success, exitCode] as [string, boolean, number],
+        ),
+    };
+    await use(handle);
+  },
+
+  openProject: async ({ page, mock }, use) => {
+    await use(async (absPath, opener) => {
+      mock.primeOpen(absPath);
+      if (opener) await opener();
+      else await page.getByRole("button", { name: "Open", exact: true }).click();
+    });
   },
 });
 

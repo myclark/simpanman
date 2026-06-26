@@ -3,12 +3,22 @@
   "private": true,
   "version": "0.1.0",
   "type": "module",
+  "main": "dist-electron/main.cjs",
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
+    "dev": "concurrently -k -n vite,electron \"npm:dev:vite\" \"npm:dev:electron\"",
+    "dev:vite": "vite",
+    "dev:electron": "wait-on tcp:1420 && npm run build:electron && cross-env ELECTRON_DEV=1 electron .",
+    "build:renderer": "tsc && vite build",
+    "build:electron": "node electron/build.mjs",
+    "build": "npm run build:renderer && npm run build:electron",
+    "dist": "npm run build && electron-builder",
     "preview": "vite preview",
     "lint": "eslint .",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p electron/tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:smoke": "playwright test -c playwright.electron.config.ts",
     "test:e2e:ui": "playwright test --ui",
     "test:e2e:headed": "playwright test --headed",
     "test:e2e:debug": "playwright test --debug"
@@ -16,6 +26,9 @@
   "dependencies": {
     "@tanstack/react-table": "^8.20.5",
     "@tanstack/react-virtual": "^3.10.9",
+    "electron-log": "^5.2.0",
+    "electron-updater": "^6.3.9",
+    "nunjucks": "^3.2.4",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "uuid": "^9.0.1",
@@ -23,11 +36,18 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.61.0",
+    "@types/node": "^20.17.6",
+    "@types/nunjucks": "^3.2.6",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
     "@types/uuid": "^9.0.7",
     "@vitejs/plugin-react": "^4.3.3",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^9.1.0",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
     "eslint": "^9.39.4",
     "eslint-plugin-react-hooks": "^5.2.0",
     "globals": "^15.15.0",
@@ -35,6 +55,8 @@
     "tailwindcss": "^3.4.15",
     "typescript": "^5.6.3",
     "typescript-eslint": "^8.61.1",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "wait-on": "^8.0.1"
   }
 }

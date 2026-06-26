@@ -1,17 +1,11 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import path from "path";
-import { readFileSync } from "fs";
 
-const pkg = JSON.parse(
-  readFileSync(path.resolve(__dirname, "package.json"), "utf-8"),
-) as { version: string };
-
-// The local Rust server (see server/src/server.rs). Override with
-// SIMPANMAN_PORT to match a non-default backend port during development.
-const apiPort = process.env.SIMPANMAN_PORT ?? "8787";
-const apiTarget = `http://127.0.0.1:${apiPort}`;
-
+// Renderer for the Electron app. `base: "./"` makes asset URLs relative so the
+// built index.html loads correctly over file:// in the packaged app. The former
+// /api → Rust-server proxy is gone: the renderer now talks to the main process
+// over the preload IPC bridge (window.api).
 export default defineConfig({
   plugins: [react()],
   resolve: {
@@ -19,17 +13,11 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
-  define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
-  },
+  base: "./",
   clearScreen: false,
   server: {
     port: 1420,
     strictPort: true,
-    proxy: {
-      "/api/events": { target: apiTarget, ws: true },
-      "/api": { target: apiTarget },
-    },
   },
   build: {
     target: "es2022",
