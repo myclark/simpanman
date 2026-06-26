@@ -90,22 +90,29 @@ export const test = base.extend<Fixtures>({
           };
         };
 
+        // Resolve on a *macrotask*, modelling the real ipcRenderer.invoke round
+        // trip. A microtask (Promise.resolve) would settle inside a trusted
+        // click's own microtask checkpoint, re-entering React mid-click and
+        // wedging the renderer — which never happens with real async IPC.
+        const defer = <T>(value: T): Promise<T> =>
+          new Promise((res) => setTimeout(() => res(value), 0));
+
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).api = {
           projectNew: (name: string) =>
-            Promise.resolve({ schemaVersion: 1, name, panels: [], boards: [], controls: [] }),
-          projectSerialize: (p: unknown) => Promise.resolve(JSON.stringify(p, null, 2)),
+            defer({ schemaVersion: 1, name, panels: [], boards: [], controls: [] }),
+          projectSerialize: (p: unknown) => defer(JSON.stringify(p, null, 2)),
           openProjectDialog: () => w.__spmOpen(),
           saveProject: (p: unknown, path: unknown) => w.__spmSave(p, path),
 
           // Mutations echo the project back (the store holds the source of truth;
           // these UI tests don't assert on mutated content).
-          panelUpsert: (p: unknown) => Promise.resolve(p),
-          panelDelete: (p: unknown) => Promise.resolve(p),
-          boardUpsert: (p: unknown) => Promise.resolve(p),
-          boardDelete: (p: unknown) => Promise.resolve(p),
-          controlUpsert: (p: unknown) => Promise.resolve(p),
-          controlDelete: (p: unknown) => Promise.resolve(p),
+          panelUpsert: (p: unknown) => defer(p),
+          panelDelete: (p: unknown) => defer(p),
+          boardUpsert: (p: unknown) => defer(p),
+          boardDelete: (p: unknown) => defer(p),
+          controlUpsert: (p: unknown) => defer(p),
+          controlDelete: (p: unknown) => defer(p),
 
           validate: (p: unknown) => w.__spmValidate(p),
           boardPinmap: (p: unknown, id: unknown) => w.__spmPinmap(p, id),
@@ -115,12 +122,12 @@ export const test = base.extend<Fixtures>({
             );
             const updated = { ...p, boards };
             const identity = boards.find((b) => b.id === id)!.identity;
-            return Promise.resolve([updated, identity]);
+            return defer([updated, identity]);
           },
-          generateBoard: () => Promise.resolve({ boardId: "", files: [] }),
+          generateBoard: () => defer({ boardId: "", files: [] }),
 
           listSerialPorts: () => w.__spmPorts(),
-          buildBoard: () => Promise.resolve(),
+          buildBoard: () => defer(undefined),
 
           onBuildLog: (cb: (e: unknown) => void) => sub(logCbs, cb),
           onBuildStatus: (cb: (e: unknown) => void) => sub(statusCbs, cb),
