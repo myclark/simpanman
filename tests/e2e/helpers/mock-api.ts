@@ -100,7 +100,22 @@ export const test = base.extend<Fixtures>({
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         (window as any).api = {
           projectNew: (name: string) =>
-            defer({ schemaVersion: 1, name, panels: [], boards: [], controls: [] }),
+            // Mirrors electron/engine/model.ts newProject(): a fresh project
+            // seeds one default panel and one default board.
+            defer({
+              schemaVersion: 1,
+              name,
+              panels: [{ id: crypto.randomUUID(), name: "Panel 1", order: 0 }],
+              boards: [
+                {
+                  id: crypto.randomUUID(),
+                  name: "Board 1",
+                  type: "leonardo",
+                  identity: { usbProduct: "Board 1", usbVid: 0x1209, usbPid: 0x0010 },
+                },
+              ],
+              controls: [],
+            }),
           projectSerialize: (p: unknown) => defer(JSON.stringify(p, null, 2)),
           openProjectDialog: () => w.__spmOpen(),
           saveProject: (p: unknown, path: unknown) => w.__spmSave(p, path),
