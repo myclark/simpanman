@@ -179,10 +179,7 @@ function BoardCard({
           ) : (
             <div
               className="text-sm font-medium truncate"
-              onClick={(e) => {
-                e.stopPropagation();
-                onStartRename();
-              }}
+              onClick={onStartRename}
             >
               {board.name}
             </div>
