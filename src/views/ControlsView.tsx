@@ -7,7 +7,7 @@ import {
   type GroupingState,
   type ExpandedState,
 } from "@tanstack/react-table";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useProjectStore } from "@/store";
 import { columns, type ControlRow } from "./controls/columns";
 
@@ -18,13 +18,17 @@ export default function ControlsView() {
 
   // All hooks must run unconditionally (Rules of Hooks). When there's no
   // project the table is built over an empty row set, then we bail out below.
-  const rows: ControlRow[] = project
-    ? project.controls.map((control) => ({
-        control,
-        panel: project.panels.find((p) => p.id === control.panelId),
-        board: project.boards.find((b) => b.id === control.boardId),
-      }))
-    : [];
+  const rows: ControlRow[] = useMemo(
+    () =>
+      project
+        ? project.controls.map((control) => ({
+            control,
+            panel: project.panels.find((p) => p.id === control.panelId),
+            board: project.boards.find((b) => b.id === control.boardId),
+          }))
+        : [],
+    [project],
+  );
 
   const table = useReactTable({
     data: rows,

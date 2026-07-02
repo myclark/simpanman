@@ -46,7 +46,7 @@ test("can expand panel group to see individual controls", async ({ page, openPro
     .filter({ hasText: "Armament Panel" })
     .first()
     .locator("td");
-  await groupTd.dispatchEvent("click");
+  await groupTd.click();
   await expect(page.getByText("Jettison Select")).toBeVisible();
   await expect(page.getByText("Master Arm")).toBeVisible();
   await expect(page.getByText("Bomb Arm")).toBeVisible();
@@ -60,10 +60,10 @@ test("can collapse panel group after expanding", async ({ page, openProject }) =
     .first()
     .locator("td");
   // Expand
-  await groupTd.dispatchEvent("click");
+  await groupTd.click();
   await expect(page.getByText("Jettison Select")).toBeVisible();
   // Collapse
-  await groupTd.dispatchEvent("click");
+  await groupTd.click();
   await expect(page.getByText("Jettison Select")).not.toBeVisible();
 });
 
@@ -80,7 +80,7 @@ test("expanded grid shows correct kinds for controls", async ({ page, openProjec
     .filter({ hasText: "Armament Panel" })
     .first()
     .locator("td");
-  await groupTd.dispatchEvent("click");
+  await groupTd.click();
   // Multiple switches in the f5e project
   await expect(page.locator("span").filter({ hasText: /^switch$/ }).first()).toBeVisible();
   // Multiple buttons

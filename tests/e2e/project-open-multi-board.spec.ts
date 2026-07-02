@@ -57,6 +57,21 @@ test("each board card shows its type and identity", async ({ page, openProject }
   await expect(page.getByText("Demo Board C")).toBeVisible();
 });
 
+test("controls visible in Armament panel group after expanding", async ({ page, openProject }) => {
+  await openMultiboardProject(page, openProject);
+  const armamentRow = page.locator("tr").filter({ hasText: "Armament" }).first();
+  await armamentRow.click();
+  await expect(page.getByText("Master Arm")).toBeVisible();
+  await expect(page.getByText("Jettison Select")).toBeVisible();
+  await expect(page.getByText("Emergency All Jettison")).toBeVisible();
+
+  // The renderer must still be responsive after expanding — regression test for a
+  // freeze where an unmemoized `data` array passed to useReactTable caused an
+  // infinite render loop on a real (trusted) click, but not on a synthetic
+  // dispatchEvent click, which is why the bug slipped past dispatchEvent-based tests.
+  await expect(page.evaluate(() => 1 + 1)).resolves.toBe(2);
+});
+
 test("encoder controls visible in Sight panel group", async ({ page, openProject }) => {
   await openMultiboardProject(page, openProject);
   const sightTd = page
@@ -64,7 +79,7 @@ test("encoder controls visible in Sight panel group", async ({ page, openProject
     .filter({ hasText: "Sight" })
     .first()
     .locator("td");
-  await sightTd.dispatchEvent("click");
+  await sightTd.click();
   await expect(page.getByText("Sight Brightness")).toBeVisible();
   await expect(page.getByText("Sight Depression")).toBeVisible();
   await expect(page.locator("span").filter({ hasText: /^encoder$/ }).first()).toBeVisible();
@@ -77,7 +92,7 @@ test("analog controls visible in Systems panel group", async ({ page, openProjec
     .filter({ hasText: "Systems" })
     .first()
     .locator("td");
-  await systemsTd.dispatchEvent("click");
+  await systemsTd.click();
   await expect(page.getByText("Cabin Pressure")).toBeVisible();
   await expect(page.getByText("Rudder Trim")).toBeVisible();
   await expect(page.locator("span").filter({ hasText: /^analog$/ }).first()).toBeVisible();

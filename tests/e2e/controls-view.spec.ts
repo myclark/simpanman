@@ -52,7 +52,7 @@ test("expand arrow changes to down arrow after clicking panel group", async ({ p
     .filter({ hasText: "Armament Panel" })
     .first()
     .locator("td");
-  await groupTd.dispatchEvent("click");
+  await groupTd.click();
   await expect(
     page.locator("tr").filter({ hasText: "Armament Panel" }).first().getByText("▼")
   ).toBeVisible();
