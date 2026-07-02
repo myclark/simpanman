@@ -13,7 +13,7 @@ SIMPANMAN_PIO ?=
 export SIMPANMAN_PIO
 
 .DEFAULT_GOAL := help
-.PHONY: help install dev build build-renderer build-electron build-helper dist run test test-engine test-e2e lint typecheck fmt clean
+.PHONY: help install dev build build-renderer build-electron build-helper dist run test test-engine test-e2e test-smoke lint typecheck fmt clean
 
 help: ## Show this help
 	@echo "Sim Panel Manager — make targets:"
@@ -62,6 +62,9 @@ test-engine: ## Run the vitest engine unit/snapshot tests
 
 test-e2e: ## Run the Playwright E2E tests
 	npm run test:e2e
+
+test-smoke: build ## Build the app and run the Electron smoke tests
+	npm run test:smoke
 
 lint: ## Run ESLint, the TypeScript checks, and clippy
 	npm run lint
