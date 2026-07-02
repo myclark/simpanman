@@ -105,14 +105,64 @@ export const test = base.extend<Fixtures>({
           openProjectDialog: () => w.__spmOpen(),
           saveProject: (p: unknown, path: unknown) => w.__spmSave(p, path),
 
-          // Mutations echo the project back (the store holds the source of truth;
-          // these UI tests don't assert on mutated content).
-          panelUpsert: (p: unknown) => defer(p),
-          panelDelete: (p: unknown) => defer(p),
-          boardUpsert: (p: unknown) => defer(p),
-          boardDelete: (p: unknown) => defer(p),
-          controlUpsert: (p: unknown) => defer(p),
-          controlDelete: (p: unknown) => defer(p),
+          // Mutations implement minimal panel/board/control logic for testing
+          panelUpsert: (project: unknown, panel: unknown) => {
+            const p = project as Record<string, unknown>;
+            const pnl = panel as { id: string; [k: string]: unknown };
+            const panels = (p.panels as typeof pnl[]) ?? [];
+            const i = panels.findIndex((x) => x.id === pnl.id);
+            const updated = [...panels];
+            if (i >= 0) updated[i] = pnl;
+            else updated.push(pnl);
+            return defer({ ...p, panels: updated });
+          },
+          panelDelete: (project: unknown, panelId: unknown) => {
+            const p = project as Record<string, unknown>;
+            const panels = ((p.panels as { id: string }[]) ?? []).filter(
+              (x) => x.id !== panelId,
+            );
+            const controls = ((p.controls as { panelId?: string }[]) ?? []).filter(
+              (c) => c.panelId !== panelId,
+            );
+            return defer({ ...p, panels, controls });
+          },
+          boardUpsert: (project: unknown, board: unknown) => {
+            const p = project as Record<string, unknown>;
+            const brd = board as { id: string; [k: string]: unknown };
+            const boards = (p.boards as typeof brd[]) ?? [];
+            const i = boards.findIndex((x) => x.id === brd.id);
+            const updated = [...boards];
+            if (i >= 0) updated[i] = brd;
+            else updated.push(brd);
+            return defer({ ...p, boards: updated });
+          },
+          boardDelete: (project: unknown, boardId: unknown) => {
+            const p = project as Record<string, unknown>;
+            const boards = ((p.boards as { id: string }[]) ?? []).filter(
+              (x) => x.id !== boardId,
+            );
+            const controls = ((p.controls as { boardId?: string }[]) ?? []).map((c) =>
+              c.boardId === boardId ? { ...c, boardId: undefined } : c,
+            );
+            return defer({ ...p, boards, controls });
+          },
+          controlUpsert: (project: unknown, control: unknown) => {
+            const p = project as Record<string, unknown>;
+            const ctrl = control as { id: string; [k: string]: unknown };
+            const controls = (p.controls as typeof ctrl[]) ?? [];
+            const i = controls.findIndex((x) => x.id === ctrl.id);
+            const updated = [...controls];
+            if (i >= 0) updated[i] = ctrl;
+            else updated.push(ctrl);
+            return defer({ ...p, controls: updated });
+          },
+          controlDelete: (project: unknown, controlId: unknown) => {
+            const p = project as Record<string, unknown>;
+            const controls = ((p.controls as { id: string }[]) ?? []).filter(
+              (x) => x.id !== controlId,
+            );
+            return defer({ ...p, controls });
+          },
 
           validate: (p: unknown) => w.__spmValidate(p),
           boardPinmap: (p: unknown, id: unknown) => w.__spmPinmap(p, id),
