@@ -22,7 +22,9 @@ export function validate(project: Project): ValidationReport {
   for (const control of project.controls) {
     const controlId = control.id;
 
-    if (!control.boardId || !boardIds.has(control.boardId)) {
+    if (control.boardId == null) {
+      warnings.push({ kind: "ControlUnassigned", controlId });
+    } else if (!boardIds.has(control.boardId)) {
       errors.push({ kind: "MissingBoardRef", controlId, boardId: control.boardId });
     }
     if (!panelIds.has(control.panelId)) {

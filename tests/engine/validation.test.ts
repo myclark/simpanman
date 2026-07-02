@@ -60,6 +60,38 @@ describe("validation", () => {
     const report = validateProject(project);
     expect(report.errors.some((e) => e.kind === "AnalogPinNotCapable")).toBe(true);
   });
+
+  it("flags an unassigned control with a warning, not an error", () => {
+    let project = projectNew("T");
+    const panelId = project.panels[0].id;
+    const unassigned: Control = {
+      id: "u1",
+      panelId,
+      label: "未 Draft Button",
+      kind: "button",
+    };
+    project = controlUpsert(project, unassigned);
+    const report = validateProject(project);
+    expect(report.errors.some((e) => e.kind === "MissingBoardRef")).toBe(false);
+    expect(report.warnings.some((w) => w.kind === "ControlUnassigned" && w.controlId === "u1")).toBe(true);
+  });
+
+  it("still flags a genuinely dangling boardId as an error", () => {
+    let project = projectNew("T");
+    const panelId = project.panels[0].id;
+    const dangling: Control = {
+      id: "d1",
+      panelId,
+      boardId: "no-such-board",
+      label: "Dangling Button",
+      kind: "button",
+      pin: { pin: "D5", inverted: false },
+    };
+    project = controlUpsert(project, dangling);
+    const report = validateProject(project);
+    expect(report.errors.some((e) => e.kind === "MissingBoardRef" && e.controlId === "d1")).toBe(true);
+    expect(report.warnings.some((w) => w.kind === "ControlUnassigned")).toBe(false);
+  });
 });
 
 describe("model round-trip", () => {

@@ -207,6 +207,8 @@ function formatWarning(w: { kind: string; [k: string]: unknown }): string {
       return `Control ${w.controlId} uses Serial pin ${w.pin} — may conflict with USB`;
     case "EncoderOnNonInterruptPin":
       return `Encoder ${w.controlId}: pin ${w.pin} is not interrupt-capable (falling back to polling)`;
+    case "ControlUnassigned":
+      return `Control ${w.controlId} has no board/pin assigned yet`;
     default:
       return JSON.stringify(w);
   }
