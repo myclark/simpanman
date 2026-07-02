@@ -22,7 +22,7 @@ export function validate(project: Project): ValidationReport {
   for (const control of project.controls) {
     const controlId = control.id;
 
-    if (!boardIds.has(control.boardId)) {
+    if (!control.boardId || !boardIds.has(control.boardId)) {
       errors.push({ kind: "MissingBoardRef", controlId, boardId: control.boardId });
     }
     if (!panelIds.has(control.panelId)) {
@@ -41,6 +41,7 @@ export function validate(project: Project): ValidationReport {
         }
         break;
       case "encoder":
+        if (control.encoder == null) break;
         if (control.encoder.mode === "axis") {
           if (control.encoder.axis == null) {
             errors.push({ kind: "EncoderMissingAxisConfig", controlId });
@@ -52,6 +53,7 @@ export function validate(project: Project): ValidationReport {
         }
         break;
       case "analog": {
+        if (control.analog == null) break;
         const board = project.boards.find((b) => b.id === control.boardId);
         if (board) {
           const profile = profileFor(board.type);
@@ -85,7 +87,7 @@ export function validate(project: Project): ValidationReport {
         pinOwners.set(pin, owners);
       }
 
-      if (control.kind === "encoder") {
+      if (control.kind === "encoder" && control.encoder != null) {
         for (const pin of [control.encoder.pinA, control.encoder.pinB]) {
           if (!profile.interruptPins.includes(pin)) {
             warnings.push({ kind: "EncoderOnNonInterruptPin", controlId, pin });
@@ -114,16 +116,16 @@ export function validate(project: Project): ValidationReport {
 export function collectPins(control: Control): string[] {
   switch (control.kind) {
     case "button":
-      return [control.pin.pin];
+      return control.pin ? [control.pin.pin] : [];
     case "switch":
-      return [control.pin.pin];
+      return control.pin ? [control.pin.pin] : [];
     case "selector":
       return [
         ...new Set(control.positions.flatMap((p) => p.pins.map((pr) => pr.pin))),
       ];
     case "encoder":
-      return [control.encoder.pinA, control.encoder.pinB];
+      return control.encoder ? [control.encoder.pinA, control.encoder.pinB] : [];
     case "analog":
-      return [control.analog.pin];
+      return control.analog ? [control.analog.pin] : [];
   }
 }

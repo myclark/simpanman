@@ -11,13 +11,13 @@ function strCmp(a: string, b: string): number {
 function buttonCount(control: Control): number {
   switch (control.kind) {
     case "button":
-      return 1;
+      return control.pin ? 1 : 0;
     case "switch":
-      return 2; // ON + OFF
+      return control.pin ? 2 : 0; // ON + OFF
     case "selector":
       return control.positions.length;
     case "encoder":
-      return control.encoder.mode === "buttons" ? 2 : 0; // CW + CCW
+      return control.encoder && control.encoder.mode === "buttons" ? 2 : 0; // CW + CCW
     case "analog":
       return 0;
   }

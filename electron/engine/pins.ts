@@ -71,7 +71,7 @@ export function computePinMap(project: Project, boardId: string): PinMap {
       });
     }
 
-    if (control.kind === "encoder") {
+    if (control.kind === "encoder" && control.encoder != null) {
       for (const pin of [control.encoder.pinA, control.encoder.pinB]) {
         if (!profile.interruptPins.includes(pin)) {
           warnings.push(

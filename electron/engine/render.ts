@@ -69,6 +69,7 @@ export function renderBoard(project: Project, boardId: string): GeneratedBoard {
     const cid = control.id;
     switch (control.kind) {
       case "button":
+        if (!control.pin) break;
         buttonControls.push({
           id: control.id,
           label: control.label,
@@ -78,6 +79,7 @@ export function renderBoard(project: Project, boardId: string): GeneratedBoard {
         });
         break;
       case "switch":
+        if (!control.pin) break;
         switchControls.push({
           id: control.id,
           label: control.label,
@@ -103,6 +105,7 @@ export function renderBoard(project: Project, boardId: string): GeneratedBoard {
         break;
       }
       case "encoder": {
+        if (!control.encoder) break;
         const enc = control.encoder;
         const useInterrupt =
           profile.interruptPins.includes(enc.pinA) &&
@@ -135,6 +138,7 @@ export function renderBoard(project: Project, boardId: string): GeneratedBoard {
         break;
       }
       case "analog": {
+        if (!control.analog) break;
         const ana = control.analog;
         usedAxes.add(ana.axis);
         analogControls.push({

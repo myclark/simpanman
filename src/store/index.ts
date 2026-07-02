@@ -168,7 +168,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = await api.controlUpsert(project, control);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
-      await get().refreshPinMap(control.boardId);
+      if (control.boardId) await get().refreshPinMap(control.boardId);
     } catch (e) {
       set({ error: String(e) });
     }
@@ -182,7 +182,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = await api.controlDelete(project, id);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
-      if (control) await get().refreshPinMap(control.boardId);
+      if (control && control.boardId) await get().refreshPinMap(control.boardId);
     } catch (e) {
       set({ error: String(e) });
     }

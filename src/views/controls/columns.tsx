@@ -13,13 +13,16 @@ function pinSummary(control: Control): string {
   switch (control.kind) {
     case "button":
     case "switch":
+      if (!control.pin) return "Unassigned";
       return control.pin.pin + (control.pin.inverted ? " (NO)" : " (NC)");
     case "selector":
       const allPins = control.positions.flatMap((p) => p.pins.map((pr) => pr.pin));
       return [...new Set(allPins)].join(", ");
     case "encoder":
+      if (!control.encoder) return "Unassigned";
       return `${control.encoder.pinA}, ${control.encoder.pinB}`;
     case "analog":
+      if (!control.analog) return "Unassigned";
       return control.analog.pin;
   }
 }
@@ -33,11 +36,13 @@ function configSummary(control: Control): string {
     case "selector":
       return `${control.positions.length} pos: ${control.positions.map((p) => p.label).join(", ")}`;
     case "encoder":
+      if (!control.encoder) return "Unassigned";
       if (control.encoder.mode === "buttons") {
         return `Buttons ×${control.encoder.pressesPerDetent ?? 1}/det`;
       }
       return `Axis ${control.encoder.axis ?? "?"} Δ${control.encoder.deltaPerStep ?? 1}`;
     case "analog":
+      if (!control.analog) return "Unassigned";
       return `${control.analog.axis} [${control.analog.inMin}–${control.analog.inMax}]`;
   }
 }

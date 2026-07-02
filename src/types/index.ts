@@ -75,16 +75,16 @@ export type AnalogConfig = {
 type Base = {
   id: string;
   panelId: string;
-  boardId: string;
+  boardId?: string;
   label: string;
   notes?: string;
 };
 
-export type ButtonControl = Base & { kind: "button"; pin: PinRef };
-export type SwitchControl = Base & { kind: "switch"; pin: PinRef; onLabel: string; offLabel: string };
+export type ButtonControl = Base & { kind: "button"; pin?: PinRef };
+export type SwitchControl = Base & { kind: "switch"; pin?: PinRef; onLabel: string; offLabel: string };
 export type SelectorControl = Base & { kind: "selector"; positions: SelectorPosition[] };
-export type EncoderControl = Base & { kind: "encoder"; encoder: EncoderConfig };
-export type AnalogControl = Base & { kind: "analog"; analog: AnalogConfig };
+export type EncoderControl = Base & { kind: "encoder"; encoder?: EncoderConfig };
+export type AnalogControl = Base & { kind: "analog"; analog?: AnalogConfig };
 
 export type Control =
   | ButtonControl
