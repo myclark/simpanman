@@ -141,9 +141,23 @@ export const test = base.extend<Fixtures>({
             const boards = ((p.boards as { id: string }[]) ?? []).filter(
               (x) => x.id !== boardId,
             );
-            const controls = ((p.controls as { boardId?: string }[]) ?? []).map((c) =>
-              c.boardId === boardId ? { ...c, boardId: undefined } : c,
-            );
+            const controls = ((p.controls as { boardId?: string; kind?: string; pin?: unknown; positions?: unknown; encoder?: unknown; analog?: unknown }[]) ?? []).map((c) => {
+              if (c.boardId !== boardId) return c;
+              const unassigned = { ...c, boardId: undefined };
+              switch (c.kind) {
+                case "button":
+                case "switch":
+                  return { ...unassigned, pin: undefined };
+                case "selector":
+                  return { ...unassigned, positions: [] };
+                case "encoder":
+                  return { ...unassigned, encoder: undefined };
+                case "analog":
+                  return { ...unassigned, analog: undefined };
+                default:
+                  return unassigned;
+              }
+            });
             return defer({ ...p, boards, controls });
           },
           controlUpsert: (project: unknown, control: unknown) => {
