@@ -164,11 +164,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
   upsertControl: async (control) => {
     const { project } = get();
     if (!project) return;
+    const previous = project.controls.find((c) => c.id === control.id);
     try {
       const updated = await api.controlUpsert(project, control);
       set({ project: updated, isDirty: true });
       scheduleRevalidate(get);
       if (control.boardId) await get().refreshPinMap(control.boardId);
+      if (previous?.boardId && previous.boardId !== control.boardId) {
+        await get().refreshPinMap(previous.boardId);
+      }
     } catch (e) {
       set({ error: String(e) });
     }
