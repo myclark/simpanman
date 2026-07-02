@@ -99,14 +99,18 @@ belongs to some panel even before it has hardware.)
   default "Untitled Panel", immediately editable) via `upsertPanel`.
 - Panel-group header row: click the panel name to rename it inline (text
   input replaces the static text, Enter/blur commits via `upsertPanel`,
-  Escape cancels); add a delete icon (confirm if it has controls, since
-  deleting cascades to deleting those controls, per existing `panelDelete`
-  behavior).
+  Escape cancels); add a delete icon that **always requires a confirmation
+  dialog** if the panel has any controls — deleting cascades to deleting
+  those controls (existing `panelDelete` behavior), and losing a panel's
+  worth of controls the user may have spent real time wiring/labeling is
+  exactly the kind of accidental-destructive action this project should
+  guard against. The dialog should say how many controls will be deleted.
 - Each expanded panel group gets a trailing "+ Add control to this panel"
   row.
-- Each leaf control row gets Edit/Delete icons (new trailing actions column,
-  or folded into the existing Notes column area — implementation detail for
-  the plan).
+- Each leaf control row gets Edit/Delete icons. Exact placement (new trailing
+  actions column vs. folded into an existing one) is left open deliberately —
+  worth iterating on visually once the editing UI exists to look at, rather
+  than deciding from a text description now.
 - Editing/adding a control is driven by **new local component state**
   (e.g. `editingControlId: string | null`, distinct from the table's
   `expanded` state), which renders an extra `<tr>` directly below the row
@@ -132,11 +136,13 @@ belongs to some panel even before it has hardware.)
   way new boards already get one elsewhere in the app — confirm existing
   default-identity behavior when implementing).
 - Each `BoardCard` gets a rename affordance (click name → inline input) and a
-  delete icon (per the `boardDelete` change above, deleting is now always
-  safe — no dangling controls — so no confirmation dialog is strictly needed
-  for data-integrity reasons, though a confirmation may still be worth adding
-  as a UX safety net for an otherwise-irreversible action; leave as an
-  implementation-time call).
+  delete icon that **always requires a confirmation dialog** if the board has
+  any assigned controls. Even though `boardDelete`'s new auto-unassign
+  behavior (above) means no control data is lost, the pin assignments
+  themselves — which may reflect real physical wiring the user did by hand —
+  are cleared, which is exactly the kind of irreversible, easy-to-regret
+  action that warrants a confirmation. The dialog should say how many
+  controls will be unassigned.
 
 ## Testing
 
@@ -156,12 +162,22 @@ belongs to some panel even before it has hardware.)
   - Add a control with no boards in the project yet (unassigned), confirm the
     non-blocking warning appears and the project still builds for boards that
     do have complete controls.
-  - Delete a board that has assigned controls, confirm those controls become
-    unassigned (not deleted) and the warning appears.
+  - Delete a board that has assigned controls, confirm a dialog appears
+    first, and after confirming, those controls become unassigned (not
+    deleted) and the warning appears.
+  - Delete a panel that has controls, confirm a dialog appears first, and
+    after confirming, both the panel and its controls are gone.
+  - Cancel a delete confirmation dialog (board or panel) and confirm nothing
+    changed.
 
 ## Open questions for implementation time
 
 - Exact placement of Edit/Delete icons in the controls grid (new column vs.
-  folding into an existing one) — implementation detail, not a design fork.
-- Whether deleting a board should still show a confirmation dialog as a UX
-  safety net even though it's no longer destructive to control data.
+  folding into an existing one) — deliberately deferred; iterate visually
+  once the editing UI exists rather than deciding from a text description.
+
+Resolved since first draft: panel and board deletion both always show a
+confirmation dialog when the deletion affects existing controls (see the
+`ControlsView.tsx` / `BoardsView.tsx` sections above) — accidentally losing
+controls or pin assignments the user may have spent real time on, including
+physical wiring, is worse than one extra click.
