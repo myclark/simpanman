@@ -4,6 +4,9 @@
   "version": "0.1.0",
   "type": "module",
   "main": "dist-electron/main.cjs",
+  "engines": {
+    "node": "20.x"
+  },
   "scripts": {
     "dev": "concurrently -k -n vite,electron \"npm:dev:vite\" \"npm:dev:electron\"",
     "dev:vite": "vite",
@@ -58,5 +61,12 @@
     "vite": "^5.4.11",
     "vitest": "^2.1.8",
     "wait-on": "^8.0.1"
+  },
+  "allowScripts": {
+    "electron@33.4.11": true,
+    "esbuild@0.24.2": true,
+    "esbuild@0.21.5": true,
+    "fsevents@2.3.3": true,
+    "fsevents@2.3.2": true
   }
 }
