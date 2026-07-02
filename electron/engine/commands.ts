@@ -4,11 +4,16 @@
 import type {
   Board,
   BoardIdentity,
+  ButtonControl,
   Control,
+  EncoderControl,
   GeneratedProject,
   Panel,
   PinMap,
   Project,
+  SelectorControl,
+  SwitchControl,
+  AnalogControl,
   ValidationReport,
 } from "./types";
 import { newProject, parseProject, serializeProject } from "./model";
@@ -56,8 +61,25 @@ export function boardUpsert(project: Project, board: Board): Project {
 export function boardDelete(project: Project, boardId: string): Project {
   const next = clone(project);
   next.boards = next.boards.filter((b) => b.id !== boardId);
-  next.controls = next.controls.filter((c) => c.boardId !== boardId);
+  next.controls = next.controls.map((c) => (c.boardId === boardId ? unassign(c) : c));
   return next;
+}
+
+/** Clear a control's board + kind-specific pin config, leaving it "unassigned". */
+function unassign(control: Control): Control {
+  const base = { ...control, boardId: undefined };
+  switch (control.kind) {
+    case "button":
+      return { ...base, pin: undefined } as ButtonControl;
+    case "switch":
+      return { ...base, pin: undefined } as SwitchControl;
+    case "selector":
+      return { ...base, positions: [] } as SelectorControl;
+    case "encoder":
+      return { ...base, encoder: undefined } as EncoderControl;
+    case "analog":
+      return { ...base, analog: undefined } as AnalogControl;
+  }
 }
 
 // ── Control mutations ──────────────────────────────────────────────────────────
