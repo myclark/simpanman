@@ -7,6 +7,11 @@ export type ControlRow = {
   board: Board | undefined;
 };
 
+export interface ControlsTableMeta {
+  onEdit: (controlId: string) => void;
+  onDelete: (control: Control) => void;
+}
+
 const helper = createColumnHelper<ControlRow>();
 
 function pinSummary(control: Control): string {
@@ -105,6 +110,33 @@ export const columns = [
     cell: (info) => (
       <span className="text-xs text-[#484f58] italic">{info.getValue() ?? ""}</span>
     ),
+  }),
+  helper.display({
+    id: "actions",
+    header: "",
+    size: 90,
+    cell: (info) => {
+      const meta = info.table.options.meta as ControlsTableMeta | undefined;
+      const control = info.row.original.control;
+      return (
+        <div className="flex gap-2">
+          <button
+            type="button"
+            onClick={() => meta?.onEdit(control.id)}
+            className="text-xs text-[#58a6ff] hover:underline"
+          >
+            Edit
+          </button>
+          <button
+            type="button"
+            onClick={() => meta?.onDelete(control)}
+            className="text-xs text-[#f85149] hover:underline"
+          >
+            Delete
+          </button>
+        </div>
+      );
+    },
   }),
 ];
 

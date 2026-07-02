@@ -32,9 +32,9 @@ test("table header columns are present after loading a project", async ({ page }
   }
 });
 
-test("toolbar hint text mentions Boards tab", async ({ page }) => {
+test("toolbar shows an Add Panel button", async ({ page }) => {
   await page.getByRole("button", { name: "New Project" }).click();
-  await expect(page.getByText("Grid editing coming soon")).toBeVisible();
+  await expect(page.getByRole("button", { name: "+ Add Panel" })).toBeVisible();
 });
 
 test("panel group rows render with expand arrow", async ({ page, openProject }) => {

@@ -29,10 +29,11 @@ test("Controls toolbar shows total controls count", async ({ page, openProject }
 
 test("three panel group rows are present", async ({ page, openProject }) => {
   await openMultiboardProject(page, openProject);
-  // Each panel appears as a group row heading (exact match to avoid title-bar collision)
-  await expect(page.getByText("Armament", { exact: true })).toBeVisible();
-  await expect(page.getByText("Sight", { exact: true })).toBeVisible();
-  await expect(page.getByText("Systems", { exact: true })).toBeVisible();
+  // Each panel appears as a group row heading (scoped to the table cell, exact
+  // match, to avoid colliding with the title bar and the Panels strip chips)
+  await expect(page.getByRole("cell").getByText("Armament", { exact: true })).toBeVisible();
+  await expect(page.getByRole("cell").getByText("Sight", { exact: true })).toBeVisible();
+  await expect(page.getByRole("cell").getByText("Systems", { exact: true })).toBeVisible();
 });
 
 test("Boards tab shows 3 total boards", async ({ page, openProject }) => {

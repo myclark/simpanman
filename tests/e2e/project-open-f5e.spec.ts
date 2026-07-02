@@ -34,8 +34,9 @@ test("Controls toolbar shows 18 controls count", async ({ page, openProject }) =
 
 test("panel group row is visible and shows child count", async ({ page, openProject }) => {
   await openF5eProject(page, openProject);
-  // The exact panel name in the group row (title bar shows the full project name)
-  await expect(page.getByText("Armament Panel", { exact: true })).toBeVisible();
+  // The exact panel name in the group row (scoped to the table cell to avoid
+  // colliding with the same panel name rendered as a chip in the Panels strip)
+  await expect(page.getByRole("cell").getByText("Armament Panel", { exact: true })).toBeVisible();
 });
 
 test("can expand panel group to see individual controls", async ({ page, openProject }) => {
