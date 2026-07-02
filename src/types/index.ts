@@ -111,10 +111,15 @@ export type UsedPin = {
   controlKind: string;
 };
 
+export type FreePin = {
+  pin: string;
+  interruptCapable: boolean;
+};
+
 export type PinMap = {
   boardId: string;
   used: UsedPin[];
-  free: string[];
+  free: FreePin[];
   warnings: string[];
 };
 

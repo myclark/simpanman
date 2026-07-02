@@ -67,12 +67,14 @@ export default function PinMapDisplay({ board, pinMap }: Props) {
             <p className="text-xs text-[#484f58]">All pins are assigned</p>
           ) : (
             <div className="flex flex-wrap gap-1.5">
-              {pinMap.free.map((pin) => (
+              {pinMap.free.map(({ pin, interruptCapable }) => (
                 <span
                   key={pin}
+                  title={interruptCapable ? "Interrupt-capable" : undefined}
                   className="font-mono text-xs px-2 py-0.5 rounded bg-[#1e3a2e] text-[#3fb950]"
                 >
                   {pin}
+                  {interruptCapable ? " ⚡" : ""}
                 </span>
               ))}
             </div>

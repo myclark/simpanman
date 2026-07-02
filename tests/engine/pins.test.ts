@@ -24,4 +24,13 @@ describe("pin allocator", () => {
     );
     expect(interruptWarnings.length).toBeGreaterThan(0);
   });
+
+  it("flags interrupt-capable free pins on board-a (D0-D3, D7 minus used D2/D10/D11)", () => {
+    const project = loadFixture("multi-board-demo.spm");
+    const map = boardPinmap(project, "board-a");
+    const d0 = map.free.find((p) => p.pin === "D0");
+    expect(d0?.interruptCapable).toBe(true);
+    const d4 = map.free.find((p) => p.pin === "D4");
+    expect(d4?.interruptCapable).toBe(false);
+  });
 });

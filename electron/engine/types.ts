@@ -8,6 +8,7 @@ export type {
   BoardIdentity,
   Board,
   PinRef,
+  FreePin,
   ControlKind,
   JoystickAxis,
   SelectorOp,

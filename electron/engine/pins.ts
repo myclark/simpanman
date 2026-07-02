@@ -83,7 +83,9 @@ export function computePinMap(project: Project, boardId: string): PinMap {
   }
 
   const usedPinNames = new Set(used.map((u) => u.pin));
-  const free = profile.allUsablePins.filter((p) => !usedPinNames.has(p));
+  const free = profile.allUsablePins
+    .filter((p) => !usedPinNames.has(p))
+    .map((pin) => ({ pin, interruptCapable: profile.interruptPins.includes(pin) }));
 
   for (const up of used) {
     if (profile.serialPins.includes(up.pin)) {

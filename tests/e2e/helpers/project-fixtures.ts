@@ -412,6 +412,7 @@ const LEONARDO_PINS = [
   "A0", "A1", "A2", "A3", "A4", "A5",
 ];
 const SERIAL_PINS = new Set(["D0", "D1"]);
+const INTERRUPT_PINS = new Set(["D0", "D1", "D2", "D3", "D7"]);
 
 function getControlPins(control: Project["controls"][number]): string[] {
   switch (control.kind) {
@@ -445,5 +446,13 @@ export function computePinMap(project: Project, boardId: string): PinMap {
     }
   }
 
-  return { boardId, used, free: LEONARDO_PINS.filter((p) => !usedSet.has(p)), warnings };
+  return {
+    boardId,
+    used,
+    free: LEONARDO_PINS.filter((p) => !usedSet.has(p)).map((pin) => ({
+      pin,
+      interruptCapable: INTERRUPT_PINS.has(pin),
+    })),
+    warnings,
+  };
 }
