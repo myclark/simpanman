@@ -126,3 +126,9 @@ which subset applies.
 Boards use VID `0x1209` (pid.codes open-source range) with locally-allocated PIDs.
 PIDs `0x0001`–`0x000F` are reserved for prototyping/example projects — see
 `examples/README.md`. Never allocate/hardcode a real vendor's VID/PID.
+
+### Deferred ideas
+
+`docs/FUTURE_IDEAS.md` holds ideas explicitly scoped out of a targeted feature/upgrade
+during design — check it before assuming something was simply forgotten, and add to it
+when you scope something out of the current work.
