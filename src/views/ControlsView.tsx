@@ -399,7 +399,7 @@ function EmptyState() {
   );
 }
 
-function formatError(e: { kind: string; [k: string]: unknown }): string {
+export function formatError(e: { kind: string; [k: string]: unknown }): string {
   switch (e.kind) {
     case "PinDoubleBooked":
       return `Pin ${e.pin} on board ${e.boardId} is used by multiple controls`;
@@ -416,7 +416,7 @@ function formatError(e: { kind: string; [k: string]: unknown }): string {
   }
 }
 
-function formatWarning(w: { kind: string; [k: string]: unknown }): string {
+export function formatWarning(w: { kind: string; [k: string]: unknown }): string {
   switch (w.kind) {
     case "SerialPinUsed":
       return `Control ${w.controlId} uses Serial pin ${w.pin} — may conflict with USB`;
