@@ -1,7 +1,8 @@
 // Bridge to the native Rust helper binary (serial enumeration + PlatformIO
-// build/upload). The helper is a one-shot CLI invoked per operation; its build
-// stream is line-delimited JSON (NDJSON) on stdout. Keeping serial/HID/pio in a
-// standalone binary avoids Electron native-module rebuild pain.
+// detect/compile/upload). The helper is a one-shot CLI invoked per operation;
+// its build stream is line-delimited JSON (NDJSON) on stdout. Keeping
+// serial/HID/pio in a standalone binary avoids Electron native-module rebuild
+// pain.
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -51,10 +52,10 @@ function helperEnv(): NodeJS.ProcessEnv {
   return env;
 }
 
-/** Enumerate serial ports via `helper list-ports` → parsed JSON array. */
-export function listSerialPorts(): Promise<SerialPort[]> {
+/** Run a helper subcommand that prints one JSON value to stdout and exits. */
+function runHelperJson<T>(args: string[]): Promise<T> {
   return new Promise((resolve, reject) => {
-    const child = spawn(helperPath(), ["list-ports"], { env: helperEnv() });
+    const child = spawn(helperPath(), args, { env: helperEnv() });
     let out = "";
     let err = "";
     child.stdout.on("data", (d) => (out += d));
@@ -62,11 +63,11 @@ export function listSerialPorts(): Promise<SerialPort[]> {
     child.on("error", (e) => reject(e));
     child.on("close", (code) => {
       if (code !== 0) {
-        reject(new Error(err.trim() || `helper list-ports exited with code ${code}`));
+        reject(new Error(err.trim() || `helper ${args[0]} exited with code ${code}`));
         return;
       }
       try {
-        resolve(JSON.parse(out || "[]") as SerialPort[]);
+        resolve(JSON.parse(out) as T);
       } catch (e) {
         reject(new Error(`parsing helper output: ${(e as Error).message}`));
       }
@@ -74,35 +75,43 @@ export function listSerialPorts(): Promise<SerialPort[]> {
   });
 }
 
+/** Enumerate serial ports via `helper list-ports` → parsed JSON array. */
+export function listSerialPorts(): Promise<SerialPort[]> {
+  return runHelperJson<SerialPort[]>(["list-ports"]);
+}
+
+export type PioInfo = { available: boolean; version: string | null };
+
+/** Detect PlatformIO via `helper pio-version` → parsed JSON. */
+export function detectPio(): Promise<PioInfo> {
+  return runHelperJson<PioInfo>(["pio-version"]);
+}
+
 export type HelperLog = { line: string; isErr: boolean };
 export type HelperStatus = { success: boolean; exitCode: number };
 
-type BuildCallbacks = {
+type RunCallbacks = {
   onLog: (e: HelperLog) => void;
   onStatus: (e: HelperStatus) => void;
 };
 
-/**
- * Run `helper build` for a generated PlatformIO project directory and stream its
- * NDJSON events to the callbacks. Resolves on success, rejects on non-zero exit.
- */
-export function buildBoard(
-  projectDir: string,
-  envName: string,
-  port: string | null,
-  cb: BuildCallbacks,
-): Promise<void> {
+/** Spawn `helper <args>`, streaming its NDJSON events to the callbacks.
+ * Resolves on success, rejects on non-zero exit. Shared by compile/upload. */
+function runHelperStream(args: string[], cb: RunCallbacks): Promise<void> {
   return new Promise((resolve, reject) => {
-    const args = ["build", "--project-dir", projectDir, "--env", envName];
-    if (port) args.push("--port", port);
-
     const child = spawn(helperPath(), args, { env: helperEnv() });
     let lastStatus: HelperStatus | null = null;
 
     const rl = readline.createInterface({ input: child.stdout });
     rl.on("line", (line) => {
       if (!line.trim()) return;
-      let msg: { type?: string; line?: string; isErr?: boolean; success?: boolean; exitCode?: number };
+      let msg: {
+        type?: string;
+        line?: string;
+        isErr?: boolean;
+        success?: boolean;
+        exitCode?: number;
+      };
       try {
         msg = JSON.parse(line);
       } catch {
@@ -124,7 +133,30 @@ export function buildBoard(
     child.on("close", (code) => {
       const ok = lastStatus ? lastStatus.success : code === 0;
       if (ok) resolve();
-      else reject(new Error(stderr.trim() || `build failed with exit code ${code}`));
+      else reject(new Error(stderr.trim() || `helper exited with code ${code}`));
     });
   });
+}
+
+/** Run `helper compile` (build only, no upload) for a generated project directory. */
+export function compileBoard(
+  projectDir: string,
+  envName: string,
+  cb: RunCallbacks,
+): Promise<void> {
+  return runHelperStream(["compile", "--project-dir", projectDir, "--env", envName], cb);
+}
+
+/** Run `helper upload` (bootloader touch + build + upload) for a generated
+ * project directory against a specific, already-confirmed port. */
+export function uploadBoard(
+  projectDir: string,
+  envName: string,
+  port: string,
+  cb: RunCallbacks,
+): Promise<void> {
+  return runHelperStream(
+    ["upload", "--project-dir", projectDir, "--env", envName, "--port", port],
+    cb,
+  );
 }
