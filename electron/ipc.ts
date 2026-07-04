@@ -21,7 +21,9 @@ import {
   allocateIdentity,
   generateBoard,
   writeToBuildDir,
+  writeProjectFiles,
   classifyDetectedPort,
+  toArduinoSketch,
 } from "./engine";
 import type { Project } from "./engine";
 import * as helper from "./helper";
@@ -115,6 +117,48 @@ export function registerIpc(): void {
         send("build:flashStatus", { boardId, success: s.success, exitCode: s.exitCode }),
     });
   });
+
+  // ── Export (native save-folder dialogs) ──────────────────────────────────────
+  ipcMain.handle("export:arduino", async (e, { project, boardId }) => {
+    const board = project.boards.find((b: Project["boards"][number]) => b.id === boardId);
+    if (!board) throw new Error(`Board '${boardId}' not found`);
+
+    const win = BrowserWindow.fromWebContents(e.sender) ?? undefined;
+    const res = await dialog.showOpenDialog(win!, {
+      title: "Export Arduino Sketch To…",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+
+    const generated = generateBoard(project, boardId);
+    const sketchName = sanitizeFileName(board.name);
+    const target = path.join(res.filePaths[0], sketchName);
+    const files = toArduinoSketch(sketchName, generated.files);
+    await writeProjectFiles(target, { boardId, files });
+    return { path: target };
+  });
+
+  ipcMain.handle("export:platformio", async (e, { project, boardId }) => {
+    const board = project.boards.find((b: Project["boards"][number]) => b.id === boardId);
+    if (!board) throw new Error(`Board '${boardId}' not found`);
+
+    const win = BrowserWindow.fromWebContents(e.sender) ?? undefined;
+    const res = await dialog.showOpenDialog(win!, {
+      title: "Export PlatformIO Project To…",
+      properties: ["openDirectory", "createDirectory"],
+    });
+    if (res.canceled || res.filePaths.length === 0) return null;
+
+    const generated = generateBoard(project, boardId);
+    const target = path.join(res.filePaths[0], sanitizeFileName(board.name));
+    await writeProjectFiles(target, generated);
+    return { path: target };
+  });
+}
+
+/** Turn a board name into a filesystem-safe directory/sketch name. */
+function sanitizeFileName(name: string): string {
+  return name.replace(/[^a-zA-Z0-9_-]+/g, "_");
 }
 
 /** Persistent per-board build directory: PlatformIO's `.pio` cache carries
