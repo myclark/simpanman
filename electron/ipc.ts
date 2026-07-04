@@ -20,7 +20,8 @@ import {
   boardPinmap,
   allocateIdentity,
   generateBoard,
-  writeToTempDir,
+  writeToBuildDir,
+  classifyDetectedPort,
 } from "./engine";
 import type { Project } from "./engine";
 import * as helper from "./helper";
@@ -82,42 +83,73 @@ export function registerIpc(): void {
     return { path: target };
   });
 
-  // ── Serial ports + build/upload (native helper) ──────────────────────────────
+  // ── Serial ports + PlatformIO detect/compile/upload (native helper) ─────────
   ipcMain.handle("ports:list", () => helper.listSerialPorts());
+  ipcMain.handle("pio:detect", () => helper.detectPio());
+  ipcMain.handle("identity:classifyPort", (_e, { project, boardId, port }) =>
+    classifyDetectedPort(project, boardId, port),
+  );
 
-  ipcMain.handle("build:run", async (e, { project, boardId, port }) => {
+  ipcMain.handle("build:compile", async (e, { project, boardId }) => {
     const send = (channel: string, payload: unknown) => {
       if (!e.sender.isDestroyed()) e.sender.send(channel, payload);
     };
 
-    const report = validateProject(project);
-    if (report.errors.length > 0) {
-      send("build:status", { boardId, success: false, exitCode: -1 });
-      throw new Error(
-        `Validation errors must be resolved before building. First: ${JSON.stringify(
-          report.errors[0],
-        )}`,
-      );
-    }
-
-    const board = project.boards.find((b: Project["boards"][number]) => b.id === boardId);
-    if (!board) throw new Error(`Board '${boardId}' not found`);
-    const envName = boardId.replace(/-/g, "_");
-
-    send("build:log", {
-      boardId,
-      line: `Generating firmware for '${board.name}'...`,
-      isErr: false,
-    });
-
-    const generated = generateBoard(project, boardId);
-    const dir = await writeToTempDir(generated);
-    send("build:log", { boardId, line: `Project written to ${path.normalize(dir)}`, isErr: false });
-
-    await helper.buildBoard(dir, envName, port ?? null, {
-      onLog: (l) => send("build:log", { boardId, line: l.line, isErr: l.isErr }),
+    const { dir, envName } = await prepareBuildDir(project, boardId, "build:compileLog", send);
+    await helper.compileBoard(dir, envName, {
+      onLog: (l) => send("build:compileLog", { boardId, line: l.line, isErr: l.isErr }),
       onStatus: (s) =>
-        send("build:status", { boardId, success: s.success, exitCode: s.exitCode }),
+        send("build:compileStatus", { boardId, success: s.success, exitCode: s.exitCode }),
     });
   });
+
+  ipcMain.handle("build:flash", async (e, { project, boardId, port }) => {
+    const send = (channel: string, payload: unknown) => {
+      if (!e.sender.isDestroyed()) e.sender.send(channel, payload);
+    };
+
+    const { dir, envName } = await prepareBuildDir(project, boardId, "build:flashLog", send);
+    await helper.uploadBoard(dir, envName, port, {
+      onLog: (l) => send("build:flashLog", { boardId, line: l.line, isErr: l.isErr }),
+      onStatus: (s) =>
+        send("build:flashStatus", { boardId, success: s.success, exitCode: s.exitCode }),
+    });
+  });
+}
+
+/** Persistent per-board build directory: PlatformIO's `.pio` cache carries
+ * over between a compile and a later flash, unlike a fresh temp dir per call. */
+function buildDirFor(boardId: string): string {
+  return path.join(app.getPath("userData"), "builds", boardId);
+}
+
+/** Validate, codegen, and write into this board's persistent build dir.
+ * Shared by compile and flash — both need up-to-date generated sources. */
+async function prepareBuildDir(
+  project: Project,
+  boardId: string,
+  logChannel: string,
+  send: (channel: string, payload: unknown) => void,
+): Promise<{ dir: string; envName: string }> {
+  const report = validateProject(project);
+  if (report.errors.length > 0) {
+    throw new Error(
+      `Validation errors must be resolved before building. First: ${JSON.stringify(
+        report.errors[0],
+      )}`,
+    );
+  }
+
+  const board = project.boards.find((b: Project["boards"][number]) => b.id === boardId);
+  if (!board) throw new Error(`Board '${boardId}' not found`);
+  const envName = boardId.replace(/-/g, "_");
+
+  send(logChannel, { boardId, line: `Generating firmware for '${board.name}'...`, isErr: false });
+
+  const generated = generateBoard(project, boardId);
+  const dir = buildDirFor(boardId);
+  await writeToBuildDir(dir, generated);
+  send(logChannel, { boardId, line: `Project written to ${path.normalize(dir)}`, isErr: false });
+
+  return { dir, envName };
 }
