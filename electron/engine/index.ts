@@ -8,6 +8,7 @@ export { renderBoard } from "./render";
 export { assignButtonIndices, totalButtonCount } from "./buttonIndex";
 export { checkUniqueness } from "./identity";
 export { classifyDetectedPort } from "./portMatch";
+export { toArduinoSketch } from "./arduinoExport";
 export { profileFor } from "./pins";
 export {
   migrate,
