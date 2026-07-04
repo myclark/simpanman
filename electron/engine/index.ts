@@ -7,6 +7,7 @@ export * from "./emitter";
 export { renderBoard } from "./render";
 export { assignButtonIndices, totalButtonCount } from "./buttonIndex";
 export { checkUniqueness } from "./identity";
+export { classifyDetectedPort } from "./portMatch";
 export { profileFor } from "./pins";
 export {
   migrate,

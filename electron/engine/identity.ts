@@ -2,7 +2,7 @@
 
 import type { BoardIdentity, Project } from "./types";
 
-const DEFAULT_VID = 0x1209;
+export const DEFAULT_VID = 0x1209;
 const PROTOTYPING_MAX_PID = 0x000f;
 const ALLOCATION_START_PID = 0x0010;
 const MAX_PID = 0xffff;
