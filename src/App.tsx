@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { setupBuildListeners } from "@/lib/events";
+import { setupCompileListeners, setupFlashListeners } from "@/lib/events";
 import { useProjectStore } from "@/store";
 import Layout from "@/components/Layout";
 import ControlsView from "@/views/ControlsView";
@@ -13,12 +13,17 @@ export type Tab = "controls" | "boards" | "build" | "test";
 export default function App() {
   const [activeTab, setActiveTab] = useState<Tab>("controls");
   const [update, setUpdate] = useState<UpdateStatus | null>(null);
-  const { appendBuildLog, setBuildStatus } = useProjectStore();
+  const { appendCompileLog, setCompileStatus, appendFlashLog, setFlashStatus } =
+    useProjectStore();
 
   useEffect(() => {
-    const unsub = setupBuildListeners({
-      onLog: appendBuildLog,
-      onStatus: setBuildStatus,
+    const unsubCompile = setupCompileListeners({
+      onLog: appendCompileLog,
+      onStatus: setCompileStatus,
+    });
+    const unsubFlash = setupFlashListeners({
+      onLog: appendFlashLog,
+      onStatus: setFlashStatus,
     });
 
     // electron-updater drives this now (download happens in the background);
@@ -26,10 +31,11 @@ export default function App() {
     const offUpdate = window.api.onUpdateStatus(setUpdate);
 
     return () => {
-      unsub.then((fn) => fn());
+      unsubCompile();
+      unsubFlash();
       offUpdate();
     };
-  }, [appendBuildLog, setBuildStatus]);
+  }, [appendCompileLog, setCompileStatus, appendFlashLog, setFlashStatus]);
 
   return (
     <Layout activeTab={activeTab} onTabChange={setActiveTab}>
