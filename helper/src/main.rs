@@ -28,9 +28,7 @@ fn main() -> ExitCode {
             eprintln!("  simpanman-helper list-ports");
             eprintln!("  simpanman-helper pio-version");
             eprintln!("  simpanman-helper compile --project-dir <dir> --env <env>");
-            eprintln!(
-                "  simpanman-helper upload --project-dir <dir> --env <env> --port <port>"
-            );
+            eprintln!("  simpanman-helper upload --project-dir <dir> --env <env> --port <port>");
             ExitCode::from(2)
         }
     }
