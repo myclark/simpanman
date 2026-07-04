@@ -1,8 +1,6 @@
 // Generated-project assembly + on-disk emission — ported from server/src/codegen/emitter.rs.
 
 import { promises as fs } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
-import { tmpdir } from "node:os";
 import path from "node:path";
 
 import type { GeneratedBoard, GeneratedFile, GeneratedProject } from "./types";
@@ -39,9 +37,11 @@ export async function writeProjectFiles(
   }
 }
 
-/** Write a generated project into a fresh temp directory and return its path. */
-export async function writeToTempDir(generated: GeneratedProject): Promise<string> {
-  const root = await mkdtemp(path.join(tmpdir(), "simpanman-"));
+/** Write a generated project into a persistent, stable directory (creating it
+ * if needed, overwriting any previous contents), so PlatformIO's `.pio` build
+ * cache carries over between a compile and a later flash. Unlike the old
+ * temp-dir approach, the caller owns the directory's path and lifetime. */
+export async function writeToBuildDir(root: string, generated: GeneratedProject): Promise<void> {
+  await fs.mkdir(root, { recursive: true });
   await writeProjectFiles(root, generated);
-  return root;
 }
