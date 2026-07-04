@@ -1,6 +1,6 @@
 # Staged Build Process Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking. **If the Superpowers plugin isn't available** (e.g. an online/cloud session with no plugin access), read `docs/superpowers/skills/executing-plans/SKILL.md` and follow it instead — it in turn points at `docs/superpowers/skills/using-git-worktrees/SKILL.md` and `docs/superpowers/skills/finishing-a-development-branch/SKILL.md`, also vendored in this repo.
 
 **Goal:** Replace `BuildView`'s single "Build & Upload" button with three per-board stages (Generate & Export, Build, Program) per `docs/superpowers/specs/2026-07-04-staged-build-process-design.md`.
 
