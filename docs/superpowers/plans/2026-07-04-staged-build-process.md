@@ -26,7 +26,7 @@
 **Interfaces:**
 - Produces: `SerialPort { name: String, description: Option<String>, vid: Option<u16>, pid: Option<u16>, serial_number: Option<String>, product: Option<String> }` (serialized camelCase). `pub fn list_serial_ports() -> Vec<SerialPort>` (signature unchanged).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Replace the full contents of `helper/src/build/ports.rs` with:
 
@@ -134,17 +134,17 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the tests to verify they pass**
+- [x] **Step 2: Run the tests to verify they pass**
 
 Run: `cargo test --manifest-path helper/Cargo.toml build::ports`
 Expected: both tests pass (this is new code plus new tests together — there's no separate "red" phase for a data-shape change like this; verify by temporarily checking the test would fail against the *old* struct shape is unnecessary since the old struct didn't have these fields at all, so compilation itself is the first signal).
 
-- [ ] **Step 3: Lint**
+- [x] **Step 3: Lint**
 
 Run: `cargo clippy --manifest-path helper/Cargo.toml -- -D warnings`
 Expected: no warnings.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add helper/src/build/ports.rs
@@ -168,7 +168,7 @@ EOF
 - Consumes: `bootloader::trigger_reset(port: &str) -> anyhow::Result<()>` (unchanged, from Task 1's sibling module).
 - Produces: `pub fn compile_board(project_dir: &str, env_name: &str) -> anyhow::Result<bool>`, `pub fn upload_board(project_dir: &str, env_name: &str, port: &str) -> anyhow::Result<bool>`, `pub struct PioInfo { pub available: bool, pub version: Option<String> }` (serde camelCase), `pub fn detect_pio() -> PioInfo`.
 
-- [ ] **Step 1: Write the failing test for version parsing**
+- [x] **Step 1: Write the failing test for version parsing**
 
 Add to the bottom of `helper/src/build/runner.rs` (after the existing functions, before nothing — it's the last thing in the file):
 
@@ -192,12 +192,12 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Run the test to verify it fails**
+- [x] **Step 2: Run the test to verify it fails**
 
 Run: `cargo test --manifest-path helper/Cargo.toml build::runner`
 Expected: compile error — `parse_pio_version` doesn't exist yet.
 
-- [ ] **Step 3: Replace the runner implementation**
+- [x] **Step 3: Replace the runner implementation**
 
 Replace the full contents of `helper/src/build/runner.rs` above the `#[cfg(test)]` block added in Step 1 with:
 
@@ -365,17 +365,17 @@ fn default_pio_path() -> PathBuf {
 }
 ```
 
-- [ ] **Step 4: Run the test to verify it passes**
+- [x] **Step 4: Run the test to verify it passes**
 
 Run: `cargo test --manifest-path helper/Cargo.toml build::runner`
 Expected: `parses_platformio_version_string` and `returns_none_for_empty_output` both pass.
 
-- [ ] **Step 5: Lint**
+- [x] **Step 5: Lint**
 
 Run: `cargo clippy --manifest-path helper/Cargo.toml -- -D warnings`
 Expected: no warnings. (`compile_board`/`upload_board`/`detect_pio` aren't called yet — that's Task 3 — so clippy may warn `dead_code`; if so, that warning disappears once Task 3 wires them in. If it persists after Task 3, address it then, not here.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add helper/src/build/runner.rs
@@ -401,7 +401,7 @@ EOF
 - Consumes: `build::ports::list_serial_ports()`, `build::runner::{compile_board, upload_board, detect_pio}` (Tasks 1–2).
 - Produces: CLI subcommands `list-ports`, `pio-version`, `compile --project-dir <dir> --env <env>`, `upload --project-dir <dir> --env <env> --port <port>`. The old `build` subcommand is removed (Electron side is updated in Task 8 to match — do not keep both).
 
-- [ ] **Step 1: Replace `main.rs`**
+- [x] **Step 1: Replace `main.rs`**
 
 Replace the full contents of `helper/src/main.rs` with:
 
@@ -552,7 +552,7 @@ fn cmd_upload(args: &[String]) -> ExitCode {
 }
 ```
 
-- [ ] **Step 2: Build and smoke-check by hand**
+- [x] **Step 2: Build and smoke-check by hand**
 
 Run: `cargo build --manifest-path helper/Cargo.toml`
 Expected: builds cleanly.
@@ -563,12 +563,12 @@ Expected: usage text listing `list-ports`, `pio-version`, `compile`, `upload`, e
 Run: `./helper/target/debug/simpanman-helper pio-version`
 Expected: JSON like `{"available":false,"version":null}` if `pio`/`SIMPANMAN_PIO` isn't set on this machine, or `{"available":true,"version":"X.Y.Z"}` if it is. Either is correct — this just confirms the subcommand runs end-to-end.
 
-- [ ] **Step 3: Full Rust verification**
+- [x] **Step 3: Full Rust verification**
 
 Run: `cargo test --manifest-path helper/Cargo.toml && cargo clippy --manifest-path helper/Cargo.toml -- -D warnings`
 Expected: all tests pass, no clippy warnings (the `dead_code` risk noted in Task 2 should be gone now that `main.rs` calls everything).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add helper/src/main.rs
@@ -591,7 +591,7 @@ EOF
 **Interfaces:**
 - Produces (all consumed by later tasks): `SerialPort` gains `vid?: number; pid?: number; serialNumber?: string; product?: string`. New: `PortClassification = "self" | "stock" | "foreign" | "unknown"`, `PioInfo = { available: boolean; version: string | null }`, `PioStatus = PioInfo & { checked: boolean }`, `CompileStatus = "idle" | "compiling" | "success" | "error"`, `FlashStatus = "idle" | "flashing" | "success" | "error"`, `BoardBuildState = { compileStatus: CompileStatus; compileLogs: BuildLogLine[]; compiledAtVersion: number | null; flashStatus: FlashStatus; flashLogs: BuildLogLine[] }`. `ElectronApi` gains `detectPio`, `compileBoard`, `flashBoard`, `classifyPort`, `onCompileLog`, `onCompileStatus`, `onFlashLog`, `onFlashStatus`, `exportArduinoSketch`, `exportPlatformioProject`; loses `buildBoard`, `onBuildLog`, `onBuildStatus`.
 
-- [ ] **Step 1: Replace `SerialPort` and remove `BuildStatus`**
+- [x] **Step 1: Replace `SerialPort` and remove `BuildStatus`**
 
 In `src/types/index.ts`, replace (around line 147-150):
 
@@ -646,7 +646,7 @@ export type BoardBuildState = {
 };
 ```
 
-- [ ] **Step 2: Update `ElectronApi`**
+- [x] **Step 2: Update `ElectronApi`**
 
 Replace (around line 220-226):
 
@@ -681,12 +681,12 @@ with:
   exportPlatformioProject(project: Project, boardId: string): Promise<{ path: string } | null>;
 ```
 
-- [ ] **Step 3: Verify (expect breakage — later tasks fix it)**
+- [x] **Step 3: Verify (expect breakage — later tasks fix it)**
 
 Run: `npx tsc --noEmit -p electron/tsconfig.json; npx tsc --noEmit`
 Expected: errors in `electron/preload.ts`, `electron/helper.ts`, `electron/ipc.ts`, `src/lib/api.ts`, `src/store/index.ts`, `src/views/BuildView.tsx` — all referencing the now-removed `buildBoard`/`onBuildLog`/`onBuildStatus`/`BuildStatus`. This is expected; each is fixed in its own task below. Do not fix them here.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/types/index.ts
@@ -715,7 +715,7 @@ EOF
 - Consumes: `Project`, `BoardType`, `SerialPort` (from `./types`), `DEFAULT_VID` (from `./identity`).
 - Produces: `export type PortClassification` (re-exported via `src/types`, already added in Task 4 — engine's `./types` re-export already covers it, no edit needed there), `export function classifyDetectedPort(project: Project, boardId: string, port: Pick<SerialPort, "vid" | "pid">): PortClassification`.
 
-- [ ] **Step 1: Export `DEFAULT_VID`**
+- [x] **Step 1: Export `DEFAULT_VID`**
 
 In `electron/engine/identity.ts:5`, change:
 
@@ -729,7 +729,7 @@ to:
 export const DEFAULT_VID = 0x1209;
 ```
 
-- [ ] **Step 2: Write the failing tests**
+- [x] **Step 2: Write the failing tests**
 
 Create `tests/engine/portMatch.test.ts`:
 
@@ -782,12 +782,12 @@ describe("classifyDetectedPort", () => {
 });
 ```
 
-- [ ] **Step 3: Run the tests to verify they fail**
+- [x] **Step 3: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/engine/portMatch.test.ts`
 Expected: FAIL — `classifyDetectedPort` is not exported from `../../electron/engine`.
 
-- [ ] **Step 4: Implement `classifyDetectedPort`**
+- [x] **Step 4: Implement `classifyDetectedPort`**
 
 Create `electron/engine/portMatch.ts`:
 
@@ -854,7 +854,7 @@ export function classifyDetectedPort(
 }
 ```
 
-- [ ] **Step 5: Export it from the engine's public surface**
+- [x] **Step 5: Export it from the engine's public surface**
 
 In `electron/engine/index.ts`, add a line alongside the other named re-exports (near `export { checkUniqueness } from "./identity";`):
 
@@ -862,12 +862,12 @@ In `electron/engine/index.ts`, add a line alongside the other named re-exports (
 export { classifyDetectedPort } from "./portMatch";
 ```
 
-- [ ] **Step 6: Run the tests to verify they pass**
+- [x] **Step 6: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/engine/portMatch.test.ts`
 Expected: all 6 tests pass.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add electron/engine/portMatch.ts electron/engine/identity.ts electron/engine/index.ts tests/engine/portMatch.test.ts
@@ -885,7 +885,7 @@ git commit -m "Add classifyDetectedPort for board-identification matching"
 **Interfaces:**
 - Produces: `export async function writeToBuildDir(root: string, generated: GeneratedProject): Promise<void>`. Removes `writeToTempDir` (confirmed unused outside `emitter.ts`/`electron/ipc.ts`, which Task 9 updates).
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/engine/emitter.test.ts`:
 
@@ -950,12 +950,12 @@ describe("writeToBuildDir", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/engine/emitter.test.ts`
 Expected: FAIL — `writeToBuildDir` is not exported.
 
-- [ ] **Step 3: Replace `writeToTempDir` with `writeToBuildDir`**
+- [x] **Step 3: Replace `writeToTempDir` with `writeToBuildDir`**
 
 In `electron/engine/emitter.ts`, replace the imports at the top:
 
@@ -997,17 +997,17 @@ export async function writeToBuildDir(root: string, generated: GeneratedProject)
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [x] **Step 4: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/engine/emitter.test.ts`
 Expected: all 3 tests pass.
 
-- [ ] **Step 5: Confirm nothing else references the removed function**
+- [x] **Step 5: Confirm nothing else references the removed function**
 
 Run: `grep -rn "writeToTempDir" --exclude-dir=node_modules /Users/myles/Repos/simpanman`
 Expected: no matches outside `docs/` (the design spec mentions it historically — leave that file as-is, it's a record of the design decision, not code).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add electron/engine/emitter.ts tests/engine/emitter.test.ts
@@ -1034,7 +1034,7 @@ EOF
 - Consumes: `GeneratedFile` (from `./types`).
 - Produces: `export function toArduinoSketch(sketchName: string, files: GeneratedFile[]): GeneratedFile[]`.
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create `tests/engine/arduinoExport.test.ts`:
 
@@ -1074,12 +1074,12 @@ describe("toArduinoSketch", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests to verify they fail**
+- [x] **Step 2: Run the tests to verify they fail**
 
 Run: `npx vitest run tests/engine/arduinoExport.test.ts`
 Expected: FAIL — module doesn't exist.
 
-- [ ] **Step 3: Implement `toArduinoSketch`**
+- [x] **Step 3: Implement `toArduinoSketch`**
 
 Create `electron/engine/arduinoExport.ts`:
 
@@ -1122,7 +1122,7 @@ export function toArduinoSketch(sketchName: string, files: GeneratedFile[]): Gen
 }
 ```
 
-- [ ] **Step 4: Export it**
+- [x] **Step 4: Export it**
 
 In `electron/engine/index.ts`, add:
 
@@ -1130,12 +1130,12 @@ In `electron/engine/index.ts`, add:
 export { toArduinoSketch } from "./arduinoExport";
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [x] **Step 5: Run the tests to verify they pass**
 
 Run: `npx vitest run tests/engine/arduinoExport.test.ts`
 Expected: all 4 tests pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add electron/engine/arduinoExport.ts electron/engine/index.ts tests/engine/arduinoExport.test.ts
@@ -1153,7 +1153,7 @@ git commit -m "Add toArduinoSketch for the Generate & Export stage"
 - Consumes: `helperPath()`, `helperEnv()` (unchanged internal helpers), the Rust CLI's `list-ports`/`pio-version`/`compile`/`upload` subcommands (Task 3).
 - Produces: `export function listSerialPorts(): Promise<SerialPort[]>`, `export type PioInfo = { available: boolean; version: string | null }`, `export function detectPio(): Promise<PioInfo>`, `export type HelperLog`, `export type HelperStatus`, `export function compileBoard(projectDir: string, envName: string, cb: RunCallbacks): Promise<void>`, `export function uploadBoard(projectDir: string, envName: string, port: string, cb: RunCallbacks): Promise<void>`. Removes `buildBoard`.
 
-- [ ] **Step 1: Replace `electron/helper.ts`**
+- [x] **Step 1: Replace `electron/helper.ts`**
 
 Replace the full file contents with:
 
@@ -1322,12 +1322,12 @@ export function uploadBoard(
 }
 ```
 
-- [ ] **Step 2: Verify (expect ipc.ts breakage — fixed in Task 9)**
+- [x] **Step 2: Verify (expect ipc.ts breakage — fixed in Task 9)**
 
 Run: `npx tsc --noEmit -p electron/tsconfig.json`
 Expected: errors only in `electron/ipc.ts` (still calling the removed `helper.buildBoard`) and `electron/preload.ts` (still referencing `ElectronApi.buildBoard`, already gone per Task 4). No errors in `electron/helper.ts` itself.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add electron/helper.ts
@@ -1345,7 +1345,7 @@ git commit -m "Rewrite helper.ts for pio-version/compile/upload"
 - Consumes: `helper.{listSerialPorts, detectPio, compileBoard, uploadBoard}` (Task 8), `classifyDetectedPort`, `writeToBuildDir` (Tasks 5–6), `generateBoard`, `validateProject` (existing).
 - Produces IPC channels: `ports:list` (unchanged), `pio:detect`, `build:compile`, `build:flash`, `identity:classifyPort`. Events: `build:compileLog`, `build:compileStatus`, `build:flashLog`, `build:flashStatus`. Removes `build:run`.
 
-- [ ] **Step 1: Update imports**
+- [x] **Step 1: Update imports**
 
 In `electron/ipc.ts`, replace the `./engine` import block:
 
@@ -1394,7 +1394,7 @@ import type { Project, SerialPort } from "./engine";
 import * as helper from "./helper";
 ```
 
-- [ ] **Step 2: Replace the build section**
+- [x] **Step 2: Replace the build section**
 
 Replace everything from `// ── Serial ports + build/upload (native helper) ──` (line 85) through the closing `}` of `registerIpc` (line 123) with:
 
@@ -1473,7 +1473,7 @@ async function prepareBuildDir(
 
 Note: `SerialPort` was imported as a type in Step 1 for the `identity:classifyPort` handler's implicit parameter typing, but since the handler body doesn't name the type explicitly, if `tsc`/eslint flags it as unused, remove that one import (keep `Project`). Check in Step 3.
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `npx tsc --noEmit -p electron/tsconfig.json`
 Expected: no errors from `electron/ipc.ts` itself. If `SerialPort` is reported unused, remove it from the `import type { Project, SerialPort } from "./engine";` line, leaving just `Project`.
@@ -1481,7 +1481,7 @@ Expected: no errors from `electron/ipc.ts` itself. If `SerialPort` is reported u
 Run: `npx eslint electron/ipc.ts`
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add electron/ipc.ts
@@ -1507,7 +1507,7 @@ EOF
 - Consumes: `toArduinoSketch` (Task 7), `writeProjectFiles` (existing, already exported via `export * from "./emitter"`), `generateBoard` (existing).
 - Produces IPC channels: `export:arduino`, `export:platformio`, each `(project, boardId) => Promise<{ path: string } | null>` (`null` on dialog cancel).
 
-- [ ] **Step 1: Add the import**
+- [x] **Step 1: Add the import**
 
 In `electron/ipc.ts`, add `toArduinoSketch` and `writeProjectFiles` to the `./engine` import list from Task 9:
 
@@ -1533,7 +1533,7 @@ import {
 } from "./engine";
 ```
 
-- [ ] **Step 2: Add the handlers**
+- [x] **Step 2: Add the handlers**
 
 Inside `registerIpc()`, immediately before the closing `}` (i.e. after the `build:flash` handler added in Task 9, still inside the function), add:
 
@@ -1584,12 +1584,12 @@ function sanitizeFileName(name: string): string {
 
 (This moves the closing `}` of `registerIpc` to after `export:platformio`, matching the pattern already established in Task 9 where `buildDirFor`/`prepareBuildDir` live below it as module-level helpers.)
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `npx tsc --noEmit -p electron/tsconfig.json && npx eslint electron/ipc.ts`
 Expected: no errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add electron/ipc.ts
@@ -1607,7 +1607,7 @@ git commit -m "Add export:arduino and export:platformio IPC handlers"
 - Consumes: the IPC channels from Tasks 9–10.
 - Produces: `window.api` methods matching the `ElectronApi` interface from Task 4 exactly.
 
-- [ ] **Step 1: Replace the native-helper section**
+- [x] **Step 1: Replace the native-helper section**
 
 In `electron/preload.ts`, replace:
 
@@ -1642,12 +1642,12 @@ with:
     ipcRenderer.invoke("export:platformio", { project, boardId }),
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `npx tsc --noEmit -p electron/tsconfig.json`
 Expected: no errors — the `api` object literal now satisfies `ElectronApi` fully (Task 4's interface). If TypeScript flags a missing/extra property, reconcile the object literal against the interface field-by-field; every `ElectronApi` member from Task 4 must have a matching line here.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add electron/preload.ts
@@ -1666,7 +1666,7 @@ git commit -m "Wire preload bridge to the new compile/flash/export channels"
 - Consumes: `window.api` (Task 11).
 - Produces: `api.detectPio(): Promise<PioInfo>`, `api.compileBoard(project, boardId): Promise<void>`, `api.flashBoard(project, boardId, port): Promise<void>`, `api.classifyPort(project, boardId, port): Promise<PortClassification>`, `api.exportArduinoSketch(project, boardId): Promise<{path}|null>`, `api.exportPlatformioProject(project, boardId): Promise<{path}|null>`. `setupCompileListeners(listeners): () => void`, `setupFlashListeners(listeners): () => void` (both now synchronous — no real main process existed to justify the old async wrapper for *new* code).
 
-- [ ] **Step 1: Update `src/lib/api.ts`**
+- [x] **Step 1: Update `src/lib/api.ts`**
 
 Replace the imports at the top:
 
@@ -1750,7 +1750,7 @@ with:
 };
 ```
 
-- [ ] **Step 2: Replace `src/lib/events.ts`**
+- [x] **Step 2: Replace `src/lib/events.ts`**
 
 Replace the full file contents with:
 
@@ -1785,12 +1785,12 @@ export function setupFlashListeners(listeners: StageListeners): () => void {
 }
 ```
 
-- [ ] **Step 3: Verify (expect breakage in store/App.tsx — fixed next tasks)**
+- [x] **Step 3: Verify (expect breakage in store/App.tsx — fixed next tasks)**
 
 Run: `npx tsc --noEmit`
 Expected: errors only in `src/store/index.ts` (still using `api.buildBoard`, `BuildStatus`) and `src/App.tsx` (still using `setupBuildListeners`). No errors in `src/lib/api.ts` or `src/lib/events.ts`.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/lib/api.ts src/lib/events.ts
@@ -1808,7 +1808,7 @@ git commit -m "Add compile/flash/detect/export/classify wrappers to src/lib"
 - Consumes: `api.{detectPio, compileBoard, flashBoard, classifyPort, exportArduinoSketch, exportPlatformioProject, generateBoard}` (Task 12), types from Task 4.
 - Produces: store state `pio: PioStatus`, `projectVersion: number`, `boardBuild: Record<string, BoardBuildState>`; actions `detectPio()`, `compileBoard(boardId)`, `flashBoard(boardId, port)`, `classifyPort(boardId, port): Promise<PortClassification>`, `generateFirmware(boardId): Promise<GeneratedProject | null>`, `exportArduinoSketch(boardId)`, `exportPlatformioProject(boardId)`, `appendCompileLog`, `setCompileStatus`, `appendFlashLog`, `setFlashStatus`. Removes `buildLogs`, `buildStatus`, `buildBoard`, `appendBuildLog`, `setBuildStatus`.
 
-- [ ] **Step 1: Replace `src/store/index.ts`**
+- [x] **Step 1: Replace `src/store/index.ts`**
 
 Replace the full file contents with:
 
@@ -2266,12 +2266,12 @@ function scheduleRevalidate(get: () => ProjectStore) {
 }
 ```
 
-- [ ] **Step 2: Verify (expect App.tsx/BuildView.tsx breakage — fixed next)**
+- [x] **Step 2: Verify (expect App.tsx/BuildView.tsx breakage — fixed next)**
 
 Run: `npx tsc --noEmit`
 Expected: errors only in `src/App.tsx` (`appendBuildLog`/`setBuildStatus` no longer exist) and `src/views/BuildView.tsx` (still the old single-button UI, referencing removed store fields).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/store/index.ts
@@ -2296,7 +2296,7 @@ EOF
 **Interfaces:**
 - Consumes: `setupCompileListeners`, `setupFlashListeners` (Task 12), `appendCompileLog`/`setCompileStatus`/`appendFlashLog`/`setFlashStatus` (Task 13).
 
-- [ ] **Step 1: Update the import and the effect**
+- [x] **Step 1: Update the import and the effect**
 
 Replace:
 
@@ -2364,12 +2364,12 @@ with:
   }, [appendCompileLog, setCompileStatus, appendFlashLog, setFlashStatus]);
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `npx tsc --noEmit`
 Expected: errors now isolated to `src/views/BuildView.tsx` only (Tasks 16–18 replace it).
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add src/App.tsx
@@ -2389,7 +2389,7 @@ Small prep step so the new Build UI can reuse existing board-type labels and val
 **Interfaces:**
 - Produces: `export const BOARD_TYPES: { value: BoardType; label: string }[]` (from `BoardsView.tsx`), `export function formatError(e: { kind: string; [k: string]: unknown }): string` and `export function formatWarning(w: { kind: string; [k: string]: unknown }): string` (from `ControlsView.tsx`).
 
-- [ ] **Step 1: Export `BOARD_TYPES`**
+- [x] **Step 1: Export `BOARD_TYPES`**
 
 In `src/views/BoardsView.tsx`, change:
 
@@ -2403,7 +2403,7 @@ to:
 export const BOARD_TYPES: { value: BoardType; label: string }[] = [
 ```
 
-- [ ] **Step 2: Export `formatError`/`formatWarning`**
+- [x] **Step 2: Export `formatError`/`formatWarning`**
 
 In `src/views/ControlsView.tsx`, change:
 
@@ -2429,12 +2429,12 @@ to:
 export function formatWarning(w: { kind: string; [k: string]: unknown }): string {
 ```
 
-- [ ] **Step 3: Verify**
+- [x] **Step 3: Verify**
 
 Run: `npx tsc --noEmit && npx eslint src/views/BoardsView.tsx src/views/ControlsView.tsx`
 Expected: no errors (adding `export` to already-used local names is a no-op for existing call sites).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/views/BoardsView.tsx src/views/ControlsView.tsx
@@ -2452,7 +2452,7 @@ git commit -m "Export BOARD_TYPES/formatError/formatWarning for reuse in BuildVi
 **Interfaces:**
 - Produces: `export function LogPane({ logs: BuildLogLine[] }): JSX.Element`, `export function StatusBadge({ status: "idle"|"compiling"|"flashing"|"success"|"error"; activeLabel: string }): JSX.Element`. `BuildView` becomes a thin shell: PlatformIO banner + maps `project.boards` to `BoardBuildCard` (Task 17 creates that component — this task can compile with a placeholder-free stub since `BoardBuildCard` doesn't exist until Task 17; see Step 3).
 
-- [ ] **Step 1: Create `src/views/build/shared.tsx`**
+- [x] **Step 1: Create `src/views/build/shared.tsx`**
 
 ```tsx
 import { useEffect, useRef } from "react";
@@ -2499,7 +2499,7 @@ export function StatusBadge({ status, activeLabel }: { status: Status; activeLab
 }
 ```
 
-- [ ] **Step 2: Replace `src/views/BuildView.tsx`**
+- [x] **Step 2: Replace `src/views/BuildView.tsx`**
 
 Replace the full file contents with:
 
@@ -2598,7 +2598,7 @@ function PioBanner({ pio, onRecheck }: { pio: PioStatus; onRecheck: () => void }
 }
 ```
 
-- [ ] **Step 3: Create a minimal `BoardBuildCard` stub so this task compiles standalone**
+- [x] **Step 3: Create a minimal `BoardBuildCard` stub so this task compiles standalone**
 
 Create `src/views/build/BoardBuildCard.tsx` with a temporary minimal stub (Task 17 replaces this with the real Stage 1/2 implementation, Task 18 adds Stage 3 — this stub only exists so Task 16 is independently verifiable):
 
@@ -2614,12 +2614,12 @@ export default function BoardBuildCard({ board }: { board: Board }) {
 }
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `npx tsc --noEmit && npx eslint src/views/BuildView.tsx src/views/build/shared.tsx src/views/build/BoardBuildCard.tsx`
 Expected: no errors — this is the first point since Task 4 where the whole renderer typechecks cleanly again.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add src/views/BuildView.tsx src/views/build/shared.tsx src/views/build/BoardBuildCard.tsx
@@ -2644,7 +2644,7 @@ EOF
 - Consumes: `LogPane`, `StatusBadge` (Task 16), `BOARD_TYPES` (Task 15, from `@/views/BoardsView`), `formatError`, `formatWarning` (Task 15, from `@/views/ControlsView`), store fields `project`, `validationReport`, `pio`, `boardBuild`, `projectVersion`, actions `generateFirmware`, `exportArduinoSketch`, `exportPlatformioProject`, `compileBoard`.
 - Produces: `export default function BoardBuildCard({ board }: { board: Board }): JSX.Element`. Stage 3 (Program) is added in Task 18 as a further edit to this same file.
 
-- [ ] **Step 1: Replace `src/views/build/BoardBuildCard.tsx`**
+- [x] **Step 1: Replace `src/views/build/BoardBuildCard.tsx`**
 
 ```tsx
 import { useState } from "react";
@@ -2843,7 +2843,7 @@ function issueUrl(boardName: string, logs: BuildLogLine[]): string {
 }
 ```
 
-- [ ] **Step 2: Verify**
+- [x] **Step 2: Verify**
 
 Run: `npx tsc --noEmit && npx eslint src/views/build/BoardBuildCard.tsx`
 Expected: no errors.
@@ -2853,7 +2853,7 @@ Expected: no errors.
 Run: `make dev`
 Open the app, load `examples/f5e-armament.spm` (File > Open), go to the Build tab. Expected: PlatformIO banner shows (available or not, depending on your machine); the Armament board card shows Generate & Export (Copy/Export buttons work) and Build (disabled if PlatformIO isn't on your machine, otherwise Compile works and streams a log). Stop the dev server when done.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add src/views/build/BoardBuildCard.tsx
@@ -2871,7 +2871,7 @@ git commit -m "Implement Generate & Export and Build stages in BoardBuildCard"
 - Consumes: store's `serialPorts`, `listPorts`, `classifyPort`, `flashBoard`, `projectVersion`, `useProjectStore.getState()` (for reading fresh `serialPorts` inside the poll loop without a stale closure).
 - Produces: the Program section, gated on a `canProgram` flag computed in this task from `build.compileStatus` and `build.compiledAtVersion` vs. `projectVersion`.
 
-- [ ] **Step 1: Add imports and local state**
+- [x] **Step 1: Add imports and local state**
 
 At the top of `src/views/build/BoardBuildCard.tsx`, change:
 
@@ -2946,7 +2946,7 @@ Add the staleness/gating computation right after the `build` fallback object (be
   const canProgram = build.compileStatus === "success" && !isStale;
 ```
 
-- [ ] **Step 2: Add the detect/classify handlers**
+- [x] **Step 2: Add the detect/classify handlers**
 
 Add these functions inside the component, after `handleExportPlatformio`:
 
@@ -2993,7 +2993,7 @@ Add these functions inside the component, after `handleExportPlatformio`:
   }
 ```
 
-- [ ] **Step 3: Insert the Program section**
+- [x] **Step 3: Insert the Program section**
 
 Replace the end of the component — the closing `</div>` (for Stage 2's outer `border-t` wrapper) followed by the final `</div>\n  );`:
 
@@ -3135,7 +3135,7 @@ Replace the end of the component — the closing `</div>` (for Stage 2's outer `
   );
 ```
 
-- [ ] **Step 4: Verify**
+- [x] **Step 4: Verify**
 
 Run: `npx tsc --noEmit && npx eslint src/views/build/BoardBuildCard.tsx`
 Expected: no errors.
@@ -3144,7 +3144,7 @@ Expected: no errors.
 
 Run: `make dev`, load `examples/f5e-armament.spm`, go to Build. If PlatformIO is available on your machine: Compile, then in the Program section click "Detect board" — plug in (or unplug/replug) an Arduino to see the diffing flow resolve; verify the manual dropdown still works as a fallback; verify Flash is disabled until a port is selected. Stop the dev server when done.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add src/views/build/BoardBuildCard.tsx
@@ -3161,7 +3161,7 @@ git commit -m "Implement Program stage: plug-in detection, identity classificati
 **Interfaces:**
 - Produces: `MockControl` gains `setPio(info: PioInfo)`, `setClassification(result: PortClassification)`, `compileCalls(): number`, `flashCalls(): number`. `window.api` mock gains `detectPio`, `compileBoard`, `flashBoard`, `classifyPort`, `exportArduinoSketch`, `exportPlatformioProject`, `onCompileLog`/`onCompileStatus`/`onFlashLog`/`onFlashStatus`. `WsHandle` gains `sendCompileLog`/`sendCompileStatus`/`sendFlashLog`/`sendFlashStatus` (replacing `sendLog`/`sendStatus`, which no longer have a channel to target).
 
-- [ ] **Step 1: Update the top-level imports and `WsHandle`/`MockControl` interfaces**
+- [x] **Step 1: Update the top-level imports and `WsHandle`/`MockControl` interfaces**
 
 In `tests/e2e/helpers/mock-api.ts`, replace:
 
@@ -3249,7 +3249,7 @@ export interface MockControl {
 }
 ```
 
-- [ ] **Step 2: Add mock state and bindings**
+- [x] **Step 2: Add mock state and bindings**
 
 Inside the `mock` fixture, replace:
 
@@ -3291,7 +3291,7 @@ Add new `exposeFunction` bindings right after the existing `__spmPorts` one:
       });
 ```
 
-- [ ] **Step 3: Replace the `addInitScript` build-event plumbing and `window.api` build fields**
+- [x] **Step 3: Replace the `addInitScript` build-event plumbing and `window.api` build fields**
 
 Inside `page.addInitScript`, replace:
 
@@ -3362,7 +3362,7 @@ with:
         };
 ```
 
-- [ ] **Step 4: Update the `control` object and `ws` fixture**
+- [x] **Step 4: Update the `control` object and `ws` fixture**
 
 Replace the `control: MockControl = { ... }` object:
 
@@ -3469,12 +3469,12 @@ with:
   },
 ```
 
-- [ ] **Step 5: Verify**
+- [x] **Step 5: Verify**
 
 Run: `npx tsc --noEmit -p tests/e2e/tsconfig.json 2>/dev/null || npx tsc --noEmit`
 Expected: no type errors in `mock-api.ts`. (`tests/build-view.spec.ts`, still using the old `sendLog`/`sendStatus`/`buildBoard` API, is fixed in Task 20 — if your typecheck command covers test files and fails there, that's expected until then.)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests/e2e/helpers/mock-api.ts
@@ -3497,7 +3497,7 @@ EOF
 **Interfaces:**
 - Consumes: `mock-api.ts` from Task 19.
 
-- [ ] **Step 1: Replace the full file**
+- [x] **Step 1: Replace the full file**
 
 ```ts
 import path from "path";
@@ -3683,17 +3683,17 @@ test.describe("PlatformIO unavailable", () => {
 });
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 Run: `npx playwright test tests/e2e/build-view.spec.ts`
 Expected: all tests pass. If the "foreign-identity" test is flaky around the plug-in-diffing poll timing, increase Playwright's default `expect` timeout for that one assertion (`await expect(...).toBeVisible({ timeout: 5000 })`) rather than adding real `sleep`s.
 
-- [ ] **Step 3: Run the full e2e suite**
+- [x] **Step 3: Run the full e2e suite**
 
 Run: `make test-e2e`
 Expected: all suites pass — this also catches any other spec file that referenced the old `BuildStatus`/`buildBoard` mock surface (none currently do per the earlier repo-wide search, but this is the safety net).
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add tests/e2e/build-view.spec.ts
@@ -3709,7 +3709,7 @@ git commit -m "Rewrite build-view e2e tests for the 3-stage flow"
 
 **Interfaces:** none (documentation only).
 
-- [ ] **Step 1: Update the native helper description**
+- [x] **Step 1: Update the native helper description**
 
 Replace:
 
@@ -3741,7 +3741,7 @@ with:
    into `electron/` or `src/`.
 ```
 
-- [ ] **Step 2: Update the data-flow paragraph**
+- [x] **Step 2: Update the data-flow paragraph**
 
 Replace:
 
@@ -3764,7 +3764,7 @@ NDJSON parsed → `build:compileLog`/`build:compileStatus` or `build:flashLog`/
 (Generate & Export / Build / Program) design.
 ```
 
-- [ ] **Step 3: Update the `emitter.ts` one-liner in the engine file list**
+- [x] **Step 3: Update the `emitter.ts` one-liner in the engine file list**
 
 Replace:
 
@@ -3780,12 +3780,12 @@ with:
    - `arduinoExport.ts` — transforms a generated project into an Arduino-IDE sketch
 ```
 
-- [ ] **Step 4: Verify by reading it back**
+- [x] **Step 4: Verify by reading it back**
 
 Run: `grep -n "build:run\|writeToTempDir\|buildBoard" CLAUDE.md`
 Expected: no matches (all stale references removed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add CLAUDE.md
@@ -3798,27 +3798,27 @@ git commit -m "Update CLAUDE.md for the staged build process"
 
 **Files:** none (verification only).
 
-- [ ] **Step 1: Rust**
+- [x] **Step 1: Rust**
 
 Run: `cargo test --manifest-path helper/Cargo.toml && cargo clippy --manifest-path helper/Cargo.toml -- -D warnings`
 Expected: all pass, no warnings.
 
-- [ ] **Step 2: Engine**
+- [x] **Step 2: Engine**
 
 Run: `make test` (or `npx vitest run`)
 Expected: all pass, including the new `portMatch`, `emitter`, and `arduinoExport` suites, and no regressions in `codegen.test.ts`/`commands.test.ts`/`identity.test.ts`/`pins.test.ts`/`validation.test.ts`.
 
-- [ ] **Step 3: Lint and typecheck**
+- [x] **Step 3: Lint and typecheck**
 
 Run: `make lint`
 Expected: eslint + `tsc --noEmit` (renderer & electron) + cargo clippy all clean.
 
-- [ ] **Step 4: Full build**
+- [x] **Step 4: Full build**
 
 Run: `make build`
 Expected: renderer + electron main/preload + helper all build successfully.
 
-- [ ] **Step 5: e2e**
+- [x] **Step 5: e2e**
 
 Run: `make test-e2e`
 Expected: all Playwright specs pass, including the rewritten `build-view.spec.ts`.
