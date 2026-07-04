@@ -66,27 +66,37 @@ Three processes/layers, not one:
    - `buttonIndex.ts` — deterministic joystick-button-index assignment across controls
    - `identity.ts` — USB VID/PID/product allocation so identical boards enumerate uniquely
    - `render.ts` + `templates.ts` — nunjucks firmware templates → per-board `main.cpp`/`platformio.ini`
-   - `emitter.ts` — writes a `GeneratedProject` to a temp dir for the build step
+   - `emitter.ts` — writes a `GeneratedProject` to a persistent per-board build dir
+   - `portMatch.ts` — classifies a detected serial port against a board's identity
+   - `arduinoExport.ts` — transforms a generated project into an Arduino-IDE sketch
    - `commands.ts` — the command surface IPC calls into (project/panel/board/control CRUD, validate, generate, allocate identity); re-exported wholesale from `index.ts`
 
    `ipc.ts` is the only place that wires engine commands to `ipcMain.handle` channels
-   and does non-pure work: native file dialogs (open/save `.spm`), and orchestrating a
-   build (validate → `generateBoard` → `writeToTempDir` → spawn the helper, streaming
-   `build:log`/`build:status` events back to the renderer that invoked it).
+   and does non-pure work: native file dialogs (open/save `.spm`, export), and
+   orchestrating a compile/flash (validate → `generateBoard` → `writeToBuildDir` →
+   spawn the helper, streaming `build:compileLog`/`build:compileStatus` or
+   `build:flashLog`/`build:flashStatus` events back to the renderer that invoked it).
 
 3. **Native helper** (`helper/`, Rust) — a one-shot CLI sidecar, `simpanman-helper`,
-   spawned per-operation by `electron/helper.ts` (never long-running). Two
-   subcommands: `list-ports` (serial enumeration → JSON) and `build --project-dir
-   --env [--port]` (the 32u4 1200-baud bootloader touch + `pio run -t upload`,
-   streaming NDJSON `{type: "log"|"status", ...}` lines on stdout that `helper.ts`
-   parses back into the callback shape `ipc.ts` forwards to the renderer). Kept
-   separate from the main process specifically to avoid Electron native-module
-   rebuild pain around serialport/HID — do not pull serial/HID logic into
-   `electron/` or `src/`.
+   spawned per-operation by `electron/helper.ts` (never long-running). Four
+   subcommands: `list-ports` (serial enumeration → JSON, including raw vid/pid/
+   serialNumber/product), `pio-version` (`pio --version` detection → JSON), `compile
+   --project-dir --env` (build only, no upload), and `upload --project-dir --env
+   --port` (the 32u4 1200-baud bootloader touch + `pio run -t upload`). Compile/
+   upload stream NDJSON `{type: "log"|"status", ...}` lines on stdout that
+   `helper.ts` parses back into the callback shape `ipc.ts` forwards to the
+   renderer. Kept separate from the main process specifically to avoid Electron
+   native-module rebuild pain around serialport/HID — do not pull serial/HID logic
+   into `electron/` or `src/`.
 
-Data flow for a build: renderer calls `window.api.buildBoard(...)` → IPC `build:run` →
-validate → codegen (engine, pure) → emit to temp dir → spawn helper → NDJSON parsed →
-`build:log`/`build:status` pushed to renderer.
+Data flow for a build: renderer calls `window.api.compileBoard(...)` or `.flashBoard(...)`
+→ IPC `build:compile`/`build:flash` → validate → codegen (engine, pure) → write into a
+persistent per-board directory (`userData/builds/<boardId>`, not a fresh temp dir — lets
+PlatformIO's `.pio` cache carry over between a compile and a later flash) → spawn helper →
+NDJSON parsed → `build:compileLog`/`build:compileStatus` or `build:flashLog`/
+`build:flashStatus` pushed to renderer. See
+`docs/superpowers/specs/2026-07-04-staged-build-process-design.md` for the full three-stage
+(Generate & Export / Build / Program) design.
 
 ### Cross-boundary types
 
