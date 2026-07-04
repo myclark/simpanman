@@ -206,7 +206,10 @@ export default function ControlForm({ project, panelId, initial, onSave, onCance
     setDraft((d) => {
       const next = { ...d, boardId };
       if (d.kind === "button" || d.kind === "switch") next.pin = recommendPin(map) || "";
-      if (d.kind === "encoder") next.pinA = recommendPin(map, { interruptCapable: true }) || "";
+      if (d.kind === "encoder") {
+        next.pinA = recommendPin(map, { interruptCapable: true }) || "";
+        next.pinB = "";
+      }
       if (d.kind === "analog") next.analogPin = recommendPin(map) || "";
       return next;
     });
