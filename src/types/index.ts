@@ -147,7 +147,15 @@ export type ValidationReport = {
 export type SerialPort = {
   name: string;
   description?: string;
+  vid?: number;
+  pid?: number;
+  serialNumber?: string;
+  product?: string;
 };
+
+/** Result of classifying a freshly-detected port against a board's identity —
+ * see `electron/engine/portMatch.ts:classifyDetectedPort`. */
+export type PortClassification = "self" | "stock" | "foreign" | "unknown";
 
 export type GeneratedFile = {
   relativePath: string;
@@ -173,7 +181,22 @@ export type BuildStatusEvent = {
   exitCode: number;
 };
 
-export type BuildStatus = "idle" | "building" | "success" | "error";
+export type PioInfo = { available: boolean; version: string | null };
+export type PioStatus = PioInfo & { checked: boolean };
+
+export type CompileStatus = "idle" | "compiling" | "success" | "error";
+export type FlashStatus = "idle" | "flashing" | "success" | "error";
+
+/** Per-board compile/flash state tracked by the store. `compiledAtVersion` is
+ * the store's `projectVersion` at the last successful compile — the Program
+ * stage compares it against the current `projectVersion` to detect staleness. */
+export type BoardBuildState = {
+  compileStatus: CompileStatus;
+  compileLogs: BuildLogLine[];
+  compiledAtVersion: number | null;
+  flashStatus: FlashStatus;
+  flashLogs: BuildLogLine[];
+};
 
 export type BuildLogLine = {
   line: string;
@@ -217,13 +240,22 @@ export interface ElectronApi {
   allocateIdentity(project: Project, boardId: string): Promise<[Project, BoardIdentity]>;
   generateBoard(project: Project, boardId: string): Promise<GeneratedProject>;
 
-  // Native helper (serial + PlatformIO build/upload).
+  // Native helper (serial + PlatformIO detect/compile/upload).
   listSerialPorts(): Promise<SerialPort[]>;
-  buildBoard(project: Project, boardId: string, port: string | null): Promise<void>;
+  detectPio(): Promise<PioInfo>;
+  compileBoard(project: Project, boardId: string): Promise<void>;
+  flashBoard(project: Project, boardId: string, port: string): Promise<void>;
+  classifyPort(project: Project, boardId: string, port: SerialPort): Promise<PortClassification>;
 
-  // Build event subscriptions (return an unsubscribe fn).
-  onBuildLog(cb: (e: BuildLogEvent) => void): () => void;
-  onBuildStatus(cb: (e: BuildStatusEvent) => void): () => void;
+  // Compile/flash event subscriptions (return an unsubscribe fn).
+  onCompileLog(cb: (e: BuildLogEvent) => void): () => void;
+  onCompileStatus(cb: (e: BuildStatusEvent) => void): () => void;
+  onFlashLog(cb: (e: BuildLogEvent) => void): () => void;
+  onFlashStatus(cb: (e: BuildStatusEvent) => void): () => void;
+
+  // Export (native save-folder dialogs).
+  exportArduinoSketch(project: Project, boardId: string): Promise<{ path: string } | null>;
+  exportPlatformioProject(project: Project, boardId: string): Promise<{ path: string } | null>;
 
   // Auto-update.
   onUpdateStatus(cb: (s: UpdateStatus) => void): () => void;

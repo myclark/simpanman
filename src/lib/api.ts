@@ -6,6 +6,8 @@ import type {
   OpenedProject,
   Panel,
   PinMap,
+  PioInfo,
+  PortClassification,
   Project,
   SavedProject,
   SerialPort,
@@ -65,9 +67,27 @@ export const api = {
 
   listSerialPorts: (): Promise<SerialPort[]> => bridge().listSerialPorts(),
 
-  buildBoard: (
+  detectPio: (): Promise<PioInfo> => bridge().detectPio(),
+
+  compileBoard: (project: Project, boardId: string): Promise<void> =>
+    bridge().compileBoard(project, boardId),
+
+  flashBoard: (project: Project, boardId: string, port: string): Promise<void> =>
+    bridge().flashBoard(project, boardId, port),
+
+  classifyPort: (
     project: Project,
     boardId: string,
-    port: string | null,
-  ): Promise<void> => bridge().buildBoard(project, boardId, port),
+    port: SerialPort,
+  ): Promise<PortClassification> => bridge().classifyPort(project, boardId, port),
+
+  exportArduinoSketch: (
+    project: Project,
+    boardId: string,
+  ): Promise<{ path: string } | null> => bridge().exportArduinoSketch(project, boardId),
+
+  exportPlatformioProject: (
+    project: Project,
+    boardId: string,
+  ): Promise<{ path: string } | null> => bridge().exportPlatformioProject(project, boardId),
 };

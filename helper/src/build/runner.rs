@@ -9,6 +9,7 @@ use std::thread;
 use std::time::Duration;
 
 use anyhow::Context;
+use serde::Serialize;
 
 use super::bootloader;
 
@@ -24,22 +25,36 @@ fn emit_status(success: bool, exit_code: i32) {
     println!("{v}");
 }
 
-/// Run `pio run -e <env> -t upload` for a generated project directory. Returns
-/// whether the build succeeded; also emits a terminal status event.
-pub fn build_board(project_dir: &str, env_name: &str, port: Option<&str>) -> anyhow::Result<bool> {
-    // 32u4 upload gotcha: trigger the bootloader with a 1200-baud touch first so
-    // the Leonardo/Micro re-enumerates before PlatformIO uploads.
-    if let Some(p) = port {
-        emit_log(&format!("Triggering bootloader on {p}..."), false);
-        match bootloader::trigger_reset(p) {
-            Ok(()) => thread::sleep(Duration::from_millis(500)),
-            Err(e) => emit_log(&format!("Warning: bootloader reset failed: {e}"), true),
-        }
+/// Run `pio run -e <env>` (compile only, no upload) for a generated project
+/// directory. Returns whether the compile succeeded; also emits a terminal
+/// status event.
+pub fn compile_board(project_dir: &str, env_name: &str) -> anyhow::Result<bool> {
+    emit_log("Running PlatformIO build...", false);
+
+    let args: Vec<String> = vec![
+        "run".into(),
+        "-e".into(),
+        env_name.into(),
+        "--project-dir".into(),
+        project_dir.into(),
+    ];
+
+    run_pio(&args, "Build complete.", "Build failed.")
+}
+
+/// Run `pio run -e <env> -t upload --upload-port <port>` for a generated
+/// project directory, touching the 32u4 bootloader first. Returns whether the
+/// upload succeeded; also emits a terminal status event.
+pub fn upload_board(project_dir: &str, env_name: &str, port: &str) -> anyhow::Result<bool> {
+    emit_log(&format!("Triggering bootloader on {port}..."), false);
+    match bootloader::trigger_reset(port) {
+        Ok(()) => thread::sleep(Duration::from_millis(500)),
+        Err(e) => emit_log(&format!("Warning: bootloader reset failed: {e}"), true),
     }
 
-    emit_log("Running PlatformIO build + upload...", false);
+    emit_log("Running PlatformIO upload...", false);
 
-    let mut args: Vec<String> = vec![
+    let args: Vec<String> = vec![
         "run".into(),
         "-e".into(),
         env_name.into(),
@@ -47,14 +62,18 @@ pub fn build_board(project_dir: &str, env_name: &str, port: Option<&str>) -> any
         "upload".into(),
         "--project-dir".into(),
         project_dir.into(),
+        "--upload-port".into(),
+        port.into(),
     ];
-    if let Some(p) = port {
-        args.push("--upload-port".into());
-        args.push(p.into());
-    }
 
+    run_pio(&args, "Upload complete.", "Upload failed.")
+}
+
+/// Spawn `pio` with the given args, streaming stdout/stderr as NDJSON log
+/// events, then emit a terminal status event. Shared by compile and upload.
+fn run_pio(args: &[String], success_msg: &str, failure_msg: &str) -> anyhow::Result<bool> {
     let mut child = pio_command()
-        .args(&args)
+        .args(args)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -63,7 +82,6 @@ pub fn build_board(project_dir: &str, env_name: &str, port: Option<&str>) -> any
     let stdout = child.stdout.take().context("capturing PlatformIO stdout")?;
     let stderr = child.stderr.take().context("capturing PlatformIO stderr")?;
 
-    // Stream stdout and stderr concurrently so logs interleave in real time.
     let out_task = thread::spawn(move || {
         for line in BufReader::new(stdout).lines().map_while(Result::ok) {
             emit_log(&line, false);
@@ -81,17 +99,45 @@ pub fn build_board(project_dir: &str, env_name: &str, port: Option<&str>) -> any
 
     let exit_code = status.code().unwrap_or(-1);
     let success = exit_code == 0;
-    emit_log(
-        if success {
-            "Build and upload complete."
-        } else {
-            "Build failed."
-        },
-        !success,
-    );
+    emit_log(if success { success_msg } else { failure_msg }, !success);
     emit_status(success, exit_code);
 
     Ok(success)
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PioInfo {
+    pub available: bool,
+    pub version: Option<String>,
+}
+
+/// Run `pio --version` to detect whether PlatformIO is reachable, using the
+/// same resolution order as `pio_command()`.
+pub fn detect_pio() -> PioInfo {
+    match pio_command().arg("--version").output() {
+        Ok(output) if output.status.success() => {
+            let text = String::from_utf8_lossy(&output.stdout);
+            PioInfo {
+                available: true,
+                version: parse_pio_version(&text),
+            }
+        }
+        _ => PioInfo {
+            available: false,
+            version: None,
+        },
+    }
+}
+
+/// Parse the version out of `pio --version` output, e.g.
+/// "PlatformIO Core, version 6.1.13" → Some("6.1.13").
+fn parse_pio_version(text: &str) -> Option<String> {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    trimmed.rsplit(' ').next().map(|s| s.to_string())
 }
 
 /// Build a `Command` for the PlatformIO executable. `SIMPANMAN_PIO` overrides the
@@ -115,5 +161,23 @@ fn default_pio_path() -> PathBuf {
         local
     } else {
         PathBuf::from(name)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_platformio_version_string() {
+        assert_eq!(
+            parse_pio_version("PlatformIO Core, version 6.1.13\n"),
+            Some("6.1.13".to_string())
+        );
+    }
+
+    #[test]
+    fn returns_none_for_empty_output() {
+        assert_eq!(parse_pio_version(""), None);
     }
 }

@@ -43,11 +43,22 @@ const api: ElectronApi = {
   generateBoard: (project, boardId) => ipcRenderer.invoke("board:generate", { project, boardId }),
 
   listSerialPorts: () => ipcRenderer.invoke("ports:list"),
-  buildBoard: (project, boardId, port) =>
-    ipcRenderer.invoke("build:run", { project, boardId, port }),
+  detectPio: () => ipcRenderer.invoke("pio:detect"),
+  compileBoard: (project, boardId) => ipcRenderer.invoke("build:compile", { project, boardId }),
+  flashBoard: (project, boardId, port) =>
+    ipcRenderer.invoke("build:flash", { project, boardId, port }),
+  classifyPort: (project, boardId, port) =>
+    ipcRenderer.invoke("identity:classifyPort", { project, boardId, port }),
 
-  onBuildLog: (cb) => subscribe<BuildLogEvent>("build:log", cb),
-  onBuildStatus: (cb) => subscribe<BuildStatusEvent>("build:status", cb),
+  onCompileLog: (cb) => subscribe<BuildLogEvent>("build:compileLog", cb),
+  onCompileStatus: (cb) => subscribe<BuildStatusEvent>("build:compileStatus", cb),
+  onFlashLog: (cb) => subscribe<BuildLogEvent>("build:flashLog", cb),
+  onFlashStatus: (cb) => subscribe<BuildStatusEvent>("build:flashStatus", cb),
+
+  exportArduinoSketch: (project, boardId) =>
+    ipcRenderer.invoke("export:arduino", { project, boardId }),
+  exportPlatformioProject: (project, boardId) =>
+    ipcRenderer.invoke("export:platformio", { project, boardId }),
 
   onUpdateStatus: (cb) => subscribe<UpdateStatus>("update:status", cb),
   installUpdate: () => ipcRenderer.invoke("update:install"),

@@ -2,13 +2,15 @@ import { create } from "zustand";
 import { api } from "@/lib/api";
 import type {
   Board,
-  BuildLogLine,
-  BuildStatus,
-  BuildStatusEvent,
+  BoardBuildState,
   BuildLogEvent,
+  BuildStatusEvent,
   Control,
+  GeneratedProject,
   Panel,
   PinMap,
+  PioStatus,
+  PortClassification,
   Project,
   SerialPort,
   ValidationReport,
@@ -21,8 +23,9 @@ interface ProjectStore {
   currentPath: string | null;
   validationReport: ValidationReport | null;
   pinMaps: Record<string, PinMap>;
-  buildLogs: Record<string, BuildLogLine[]>;
-  buildStatus: Record<string, BuildStatus>;
+  projectVersion: number;
+  pio: PioStatus;
+  boardBuild: Record<string, BoardBuildState>;
   serialPorts: SerialPort[];
   error: string | null;
 
@@ -47,11 +50,19 @@ interface ProjectStore {
 
   // Build
   listPorts: () => Promise<void>;
-  buildBoard: (boardId: string, port: string | null) => Promise<void>;
+  detectPio: () => Promise<void>;
+  generateFirmware: (boardId: string) => Promise<GeneratedProject | null>;
+  compileBoard: (boardId: string) => Promise<void>;
+  flashBoard: (boardId: string, port: string) => Promise<void>;
+  classifyPort: (boardId: string, port: SerialPort) => Promise<PortClassification>;
+  exportArduinoSketch: (boardId: string) => Promise<{ path: string } | null>;
+  exportPlatformioProject: (boardId: string) => Promise<{ path: string } | null>;
 
   // Build event handlers (called from event listeners)
-  appendBuildLog: (event: BuildLogEvent) => void;
-  setBuildStatus: (event: BuildStatusEvent) => void;
+  appendCompileLog: (event: BuildLogEvent) => void;
+  setCompileStatus: (event: BuildStatusEvent) => void;
+  appendFlashLog: (event: BuildLogEvent) => void;
+  setFlashStatus: (event: BuildStatusEvent) => void;
 
   // Error
   clearError: () => void;
@@ -59,21 +70,42 @@ interface ProjectStore {
 
 let revalidateTimer: ReturnType<typeof setTimeout> | null = null;
 
+const EMPTY_BOARD_BUILD: BoardBuildState = {
+  compileStatus: "idle",
+  compileLogs: [],
+  compiledAtVersion: null,
+  flashStatus: "idle",
+  flashLogs: [],
+};
+
+function boardBuildOf(get: () => ProjectStore, boardId: string): BoardBuildState {
+  return get().boardBuild[boardId] ?? EMPTY_BOARD_BUILD;
+}
+
 export const useProjectStore = create<ProjectStore>((set, get) => ({
   project: null,
   isDirty: false,
   currentPath: null,
   validationReport: null,
   pinMaps: {},
-  buildLogs: {},
-  buildStatus: {},
+  projectVersion: 0,
+  pio: { checked: false, available: false, version: null },
+  boardBuild: {},
   serialPorts: [],
   error: null,
 
   newProject: async (name) => {
     try {
       const project = await api.projectNew(name);
-      set({ project, isDirty: false, currentPath: null, validationReport: null, pinMaps: {} });
+      set({
+        project,
+        isDirty: false,
+        currentPath: null,
+        validationReport: null,
+        pinMaps: {},
+        projectVersion: 0,
+        boardBuild: {},
+      });
       await get().refreshAllPinMaps();
     } catch (e) {
       set({ error: String(e) });
@@ -90,6 +122,8 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
         currentPath: opened.path,
         validationReport: null,
         pinMaps: {},
+        projectVersion: 0,
+        boardBuild: {},
       });
       await Promise.all([get().revalidate(), get().refreshAllPinMaps()]);
     } catch (e) {
@@ -101,7 +135,6 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const { project, currentPath } = get();
     if (!project) return;
     try {
-      // Save to the known path, or prompt (Save As) when there isn't one yet.
       const saved = await api.saveProject(project, currentPath);
       if (!saved) return; // dialog cancelled
       set({ isDirty: false, currentPath: saved.path });
@@ -115,7 +148,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (!project) return;
     try {
       const updated = await api.panelUpsert(project, panel);
-      set({ project: updated, isDirty: true });
+      set((s) => ({ project: updated, isDirty: true, projectVersion: s.projectVersion + 1 }));
       scheduleRevalidate(get);
     } catch (e) {
       set({ error: String(e) });
@@ -127,7 +160,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (!project) return;
     try {
       const updated = await api.panelDelete(project, id);
-      set({ project: updated, isDirty: true });
+      set((s) => ({ project: updated, isDirty: true, projectVersion: s.projectVersion + 1 }));
       scheduleRevalidate(get);
     } catch (e) {
       set({ error: String(e) });
@@ -139,7 +172,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (!project) return;
     try {
       const updated = await api.boardUpsert(project, board);
-      set({ project: updated, isDirty: true });
+      set((s) => ({ project: updated, isDirty: true, projectVersion: s.projectVersion + 1 }));
       scheduleRevalidate(get);
       await get().refreshPinMap(board.id);
     } catch (e) {
@@ -154,7 +187,15 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
       const updated = await api.boardDelete(project, id);
       const pinMaps = { ...get().pinMaps };
       delete pinMaps[id];
-      set({ project: updated, isDirty: true, pinMaps });
+      const boardBuild = { ...get().boardBuild };
+      delete boardBuild[id];
+      set((s) => ({
+        project: updated,
+        isDirty: true,
+        pinMaps,
+        boardBuild,
+        projectVersion: s.projectVersion + 1,
+      }));
       scheduleRevalidate(get);
     } catch (e) {
       set({ error: String(e) });
@@ -167,7 +208,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const previous = project.controls.find((c) => c.id === control.id);
     try {
       const updated = await api.controlUpsert(project, control);
-      set({ project: updated, isDirty: true });
+      set((s) => ({ project: updated, isDirty: true, projectVersion: s.projectVersion + 1 }));
       scheduleRevalidate(get);
       if (control.boardId) await get().refreshPinMap(control.boardId);
       if (previous?.boardId && previous.boardId !== control.boardId) {
@@ -184,7 +225,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     const control = project.controls.find((c) => c.id === id);
     try {
       const updated = await api.controlDelete(project, id);
-      set({ project: updated, isDirty: true });
+      set((s) => ({ project: updated, isDirty: true, projectVersion: s.projectVersion + 1 }));
       scheduleRevalidate(get);
       if (control && control.boardId) await get().refreshPinMap(control.boardId);
     } catch (e) {
@@ -225,7 +266,7 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     if (!project) return;
     try {
       const [updated] = await api.allocateIdentity(project, boardId);
-      set({ project: updated, isDirty: true });
+      set((s) => ({ project: updated, isDirty: true, projectVersion: s.projectVersion + 1 }));
     } catch (e) {
       set({ error: String(e) });
     }
@@ -240,42 +281,165 @@ export const useProjectStore = create<ProjectStore>((set, get) => ({
     }
   },
 
-  buildBoard: async (boardId, port) => {
+  detectPio: async () => {
+    try {
+      const info = await api.detectPio();
+      set({ pio: { checked: true, available: info.available, version: info.version } });
+    } catch (e) {
+      set({ pio: { checked: true, available: false, version: null }, error: String(e) });
+    }
+  },
+
+  generateFirmware: async (boardId) => {
+    const { project } = get();
+    if (!project) return null;
+    try {
+      return await api.generateBoard(project, boardId);
+    } catch (e) {
+      set({ error: String(e) });
+      return null;
+    }
+  },
+
+  compileBoard: async (boardId) => {
     const { project } = get();
     if (!project) return;
     set((s) => ({
-      buildLogs: { ...s.buildLogs, [boardId]: [] },
-      buildStatus: { ...s.buildStatus, [boardId]: "building" },
+      boardBuild: {
+        ...s.boardBuild,
+        [boardId]: { ...boardBuildOf(get, boardId), compileStatus: "compiling", compileLogs: [] },
+      },
     }));
     try {
-      await api.buildBoard(project, boardId, port);
+      await api.compileBoard(project, boardId);
     } catch (e) {
       set((s) => ({
-        buildStatus: { ...s.buildStatus, [boardId]: "error" },
+        boardBuild: {
+          ...s.boardBuild,
+          [boardId]: { ...boardBuildOf(get, boardId), compileStatus: "error" },
+        },
         error: String(e),
       }));
     }
   },
 
-  appendBuildLog: (event) => {
+  flashBoard: async (boardId, port) => {
+    const { project } = get();
+    if (!project) return;
     set((s) => ({
-      buildLogs: {
-        ...s.buildLogs,
-        [event.boardId]: [
-          ...(s.buildLogs[event.boardId] ?? []),
-          { line: event.line, isErr: event.isErr, timestamp: Date.now() },
-        ],
+      boardBuild: {
+        ...s.boardBuild,
+        [boardId]: { ...boardBuildOf(get, boardId), flashStatus: "flashing", flashLogs: [] },
       },
     }));
+    try {
+      await api.flashBoard(project, boardId, port);
+    } catch (e) {
+      set((s) => ({
+        boardBuild: {
+          ...s.boardBuild,
+          [boardId]: { ...boardBuildOf(get, boardId), flashStatus: "error" },
+        },
+        error: String(e),
+      }));
+    }
   },
 
-  setBuildStatus: (event) => {
-    set((s) => ({
-      buildStatus: {
-        ...s.buildStatus,
-        [event.boardId]: event.success ? "success" : "error",
-      },
-    }));
+  classifyPort: async (boardId, port) => {
+    const { project } = get();
+    if (!project) return "unknown";
+    try {
+      return await api.classifyPort(project, boardId, port);
+    } catch (e) {
+      set({ error: String(e) });
+      return "unknown";
+    }
+  },
+
+  exportArduinoSketch: async (boardId) => {
+    const { project } = get();
+    if (!project) return null;
+    try {
+      return await api.exportArduinoSketch(project, boardId);
+    } catch (e) {
+      set({ error: String(e) });
+      return null;
+    }
+  },
+
+  exportPlatformioProject: async (boardId) => {
+    const { project } = get();
+    if (!project) return null;
+    try {
+      return await api.exportPlatformioProject(project, boardId);
+    } catch (e) {
+      set({ error: String(e) });
+      return null;
+    }
+  },
+
+  appendCompileLog: (event) => {
+    set((s) => {
+      const board = boardBuildOf(get, event.boardId);
+      return {
+        boardBuild: {
+          ...s.boardBuild,
+          [event.boardId]: {
+            ...board,
+            compileLogs: [
+              ...board.compileLogs,
+              { line: event.line, isErr: event.isErr, timestamp: Date.now() },
+            ],
+          },
+        },
+      };
+    });
+  },
+
+  setCompileStatus: (event) => {
+    set((s) => {
+      const board = boardBuildOf(get, event.boardId);
+      return {
+        boardBuild: {
+          ...s.boardBuild,
+          [event.boardId]: {
+            ...board,
+            compileStatus: event.success ? "success" : "error",
+            compiledAtVersion: event.success ? s.projectVersion : board.compiledAtVersion,
+          },
+        },
+      };
+    });
+  },
+
+  appendFlashLog: (event) => {
+    set((s) => {
+      const board = boardBuildOf(get, event.boardId);
+      return {
+        boardBuild: {
+          ...s.boardBuild,
+          [event.boardId]: {
+            ...board,
+            flashLogs: [
+              ...board.flashLogs,
+              { line: event.line, isErr: event.isErr, timestamp: Date.now() },
+            ],
+          },
+        },
+      };
+    });
+  },
+
+  setFlashStatus: (event) => {
+    set((s) => {
+      const board = boardBuildOf(get, event.boardId);
+      return {
+        boardBuild: {
+          ...s.boardBuild,
+          [event.boardId]: { ...board, flashStatus: event.success ? "success" : "error" },
+        },
+      };
+    });
   },
 
   clearError: () => set({ error: null }),

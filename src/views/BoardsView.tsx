@@ -3,7 +3,7 @@ import { useProjectStore } from "@/store";
 import type { Board, BoardType } from "@/types";
 import PinMapDisplay from "./boards/PinMapDisplay";
 
-const BOARD_TYPES: { value: BoardType; label: string }[] = [
+export const BOARD_TYPES: { value: BoardType; label: string }[] = [
   { value: "leonardo", label: "Leonardo" },
   { value: "micro", label: "Micro" },
   { value: "pro_micro", label: "Pro Micro" },
