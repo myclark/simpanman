@@ -39,3 +39,16 @@ A richer version would let the user visually confirm which physical board
 they're holding (photo) and see a labeled pinout diagram to plug wires in
 against, and could be enumerated from a real board database instead of a
 static hardcoded list.
+
+## Bump CI off Node 20
+
+`.github/workflows/ci.yml` and `.nvmrc`/`package.json#engines` pin Node 20.x.
+GitHub Actions runners now warn on this (Node 20 is deprecated for actions,
+being forced onto Node 24 under the hood as of the 2025-09-19 change:
+https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/).
+Not urgent — CI still passes — but worth bumping the pinned Node version
+(and re-verifying `make install`/`make build`/`make test` etc. still work)
+before Node 20 support is dropped outright.
+
+In general, it would be a good idea to always have the CI and the project itself match.
+This, in that case the we bump to 24, bump everything to 24.
