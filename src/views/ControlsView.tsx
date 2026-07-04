@@ -94,9 +94,19 @@ export default function ControlsView() {
   };
 
   const handleSaveControl = (control: Control) => {
+    // Was this an "add to panel" save (as opposed to editing an existing
+    // control)? If so, the panel may be transitioning from "manually
+    // rendered empty group" (see the empty-panel loop below) to TanStack's
+    // own grouped row on the next render, which defaults to collapsed since
+    // `expanded` has no entry for a group that didn't exist a moment ago.
+    // Force everything open so the just-added control stays visible.
+    const wasAdding = addingToPanelId !== null;
     upsertControl(control);
     setEditingControlId(null);
     setAddingToPanelId(null);
+    if (wasAdding) {
+      setExpanded(true);
+    }
   };
 
   // Build the table body as a flat list of <tr>s, interleaving the edit form
@@ -189,6 +199,63 @@ export default function ControlsView() {
     }
   }
 
+  // TanStack's grouped row model only produces a group row for a panel that
+  // has at least one data row (rows are derived 1:1 from project.controls).
+  // A panel with zero controls would otherwise never appear in the table at
+  // all, making its "+ Add control to this panel" affordance unreachable —
+  // this hits every brand-new project (the seeded default panel starts with
+  // 0 controls) and every panel added via "+ Add Panel". Render a matching
+  // group-header row for those panels here, as a separate additive path
+  // alongside (not a rework of) TanStack's own grouping above. There's
+  // nothing to collapse for an empty group besides the add-control
+  // affordance, so it's always shown — no toggle state needed.
+  const emptyPanels = project.panels
+    .filter((panel) => !project.controls.some((c) => c.panelId === panel.id))
+    .sort((a, b) => a.order - b.order);
+
+  for (const panel of emptyPanels) {
+    bodyRows.push(
+      <tr key={`empty-${panel.id}`} className="bg-[#1c2333] border-y border-[#30363d]">
+        <td colSpan={columns.length} className="px-3 py-2">
+          <span className="text-xs mr-2 text-[#484f58]">▼</span>
+          <span className="font-semibold text-[#e6edf3]">{panel.name}</span>
+          <span className="ml-2 text-xs text-[#484f58]">0 controls</span>
+        </td>
+      </tr>,
+    );
+    bodyRows.push(
+      <tr key={`empty-${panel.id}-add`} className="bg-[#0d1117]">
+        <td colSpan={columns.length} className="px-3 py-1.5">
+          <button
+            type="button"
+            onClick={() => {
+              setEditingControlId(null);
+              setAddingToPanelId(panel.id);
+            }}
+            className="text-xs text-[#58a6ff] hover:underline"
+          >
+            + Add control to this panel
+          </button>
+        </td>
+      </tr>,
+    );
+    if (addingToPanelId === panel.id) {
+      bodyRows.push(
+        <tr key={`empty-${panel.id}-form`}>
+          <td colSpan={columns.length} className="px-3 py-2">
+            <ControlForm
+              project={project}
+              panelId={panel.id}
+              initial={null}
+              onSave={handleSaveControl}
+              onCancel={() => setAddingToPanelId(null)}
+            />
+          </td>
+        </tr>,
+      );
+    }
+  }
+
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
@@ -274,10 +341,16 @@ export default function ControlsView() {
           <tbody>{bodyRows}</tbody>
         </table>
 
-        {project.controls.length === 0 && (
+        {project.panels.length === 0 && (
           <div className="flex flex-col items-center justify-center py-20 text-[#484f58]">
-            <p className="text-lg mb-2">No controls yet.</p>
-            <p className="text-sm">Use "+ Add Panel" above, then expand it to add a control.</p>
+            <p className="text-lg mb-3">No panels yet.</p>
+            <button
+              type="button"
+              onClick={addPanel}
+              className="px-4 py-2 rounded bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] text-sm"
+            >
+              + Add your first panel
+            </button>
           </div>
         )}
       </div>

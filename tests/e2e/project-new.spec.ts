@@ -17,12 +17,20 @@ test('"New Project" button in empty state creates a project', async ({ page }) =
 
 test("Controls view shows 0 controls count after new project", async ({ page }) => {
   await page.getByRole("button", { name: "New Project" }).click();
-  await expect(page.getByText("0 controls")).toBeVisible();
+  // The seeded panel's own (empty) group-header row also reads "0 controls",
+  // so an unscoped locator would match two elements; `.first()` targets the
+  // toolbar's overall count.
+  await expect(page.getByText("0 controls").first()).toBeVisible();
 });
 
-test("Controls view shows empty-controls message after new project", async ({ page }) => {
+test("Controls view shows seeded panel with add-control affordance after new project", async ({
+  page,
+}) => {
   await page.getByRole("button", { name: "New Project" }).click();
-  await expect(page.getByText("No controls yet.")).toBeVisible();
+  // "Panel 1" appears both in the Panels strip chip and the table's own
+  // group-header row for the same panel; `.first()` targets the chip.
+  await expect(page.getByText("Panel 1", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("+ Add control to this panel")).toBeVisible();
 });
 
 test("Boards tab shows 1 total after new project", async ({ page }) => {

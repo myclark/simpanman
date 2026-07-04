@@ -25,7 +25,9 @@ test("shows empty state with emoji and action buttons when no project", async ({
 
 test("table header columns are present after loading a project", async ({ page }) => {
   await page.getByRole("button", { name: "New Project" }).click();
-  await expect(page.getByText("No controls yet.")).toBeVisible();
+  // "Panel 1" appears both in the Panels strip chip and the table's own
+  // group-header row for the same (empty) panel; `.first()` targets the chip.
+  await expect(page.getByText("Panel 1", { exact: true }).first()).toBeVisible();
   const headers = ["Panel", "Label", "Kind", "Board", "Pin(s)", "Config", "Notes"];
   for (const header of headers) {
     await expect(page.getByRole("columnheader", { name: header })).toBeVisible();
