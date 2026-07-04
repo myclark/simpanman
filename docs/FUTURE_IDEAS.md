@@ -30,8 +30,12 @@ ATmega32u4 variants. There's no photo, no 2D pinout diagram, and no
 enumeration from an external source of truth (e.g. PlatformIO's own board
 list).
 
+In addition, just because they share a microcontroller, does not mean that the pins of the microcontroller match the name of the pins on the board itself.
+Keep in mind, that the user will see the pins of the board, not the microcontroller.
+Some pins may not have been exposed, and some may have been renamed.
+This will depend on the board itself, not just the microcontroller.
+
 A richer version would let the user visually confirm which physical board
 they're holding (photo) and see a labeled pinout diagram to plug wires in
 against, and could be enumerated from a real board database instead of a
-static hardcoded list — but this is squarely a Boards-view / board-catalog
-data model feature, not something the build-process work should absorb.
+static hardcoded list.
