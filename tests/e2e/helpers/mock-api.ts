@@ -1,6 +1,12 @@
 import { test as base, expect } from "@playwright/test";
 import { readFileSync } from "node:fs";
-import type { Project, SerialPort, ValidationReport } from "../../../src/types/index.js";
+import type {
+  PioInfo,
+  PortClassification,
+  Project,
+  SerialPort,
+  ValidationReport,
+} from "../../../src/types/index.js";
 import { computePinMap } from "./project-fixtures.js";
 
 // The renderer talks to the Electron main process over the preload bridge
@@ -12,8 +18,10 @@ import { computePinMap } from "./project-fixtures.js";
 
 /** Handle for pushing build log/status events the way the main process would. */
 export interface WsHandle {
-  sendLog(boardId: string, line: string, isErr?: boolean): Promise<void>;
-  sendStatus(boardId: string, success: boolean, exitCode?: number): Promise<void>;
+  sendCompileLog(boardId: string, line: string, isErr?: boolean): Promise<void>;
+  sendCompileStatus(boardId: string, success: boolean, exitCode?: number): Promise<void>;
+  sendFlashLog(boardId: string, line: string, isErr?: boolean): Promise<void>;
+  sendFlashStatus(boardId: string, success: boolean, exitCode?: number): Promise<void>;
 }
 
 /** Test-side controls over the injected window.api. */
@@ -24,10 +32,18 @@ export interface MockControl {
   setValidate(report: ValidationReport): void;
   /** Override the serial ports listSerialPorts() returns. */
   setPorts(ports: SerialPort[]): void;
+  /** Override the pio-version detection result (defaults to available). */
+  setPio(info: PioInfo): void;
+  /** Override the classifyPort() result (defaults to "unknown"). */
+  setClassification(result: PortClassification): void;
   /** How many times listSerialPorts() has been invoked. */
   portListCalls(): number;
   /** How many times saveProject() has been invoked. */
   saveCalls(): number;
+  /** How many times compileBoard() has been invoked. */
+  compileCalls(): number;
+  /** How many times flashBoard() has been invoked. */
+  flashCalls(): number;
 }
 
 const DEFAULT_PORTS: SerialPort[] = [
@@ -48,8 +64,12 @@ export const test = base.extend<Fixtures>({
       let pendingOpen: { project: Project; path: string } | null = null;
       let validateOverride: ValidationReport | null = null;
       let portsOverride: SerialPort[] | null = null;
+      let pioOverride: PioInfo = { available: true, version: "6.1.13" };
+      let classificationOverride: PortClassification = "unknown";
       let portListCalls = 0;
       let saveCalls = 0;
+      let compileCalls = 0;
+      let flashCalls = 0;
 
       await page.exposeFunction("__spmOpen", () => {
         const r = pendingOpen;
@@ -71,16 +91,33 @@ export const test = base.extend<Fixtures>({
       await page.exposeFunction("__spmPinmap", (project: Project, boardId: string) =>
         computePinMap(project, boardId),
       );
+      await page.exposeFunction("__spmPio", (): PioInfo => pioOverride);
+      await page.exposeFunction(
+        "__spmClassify",
+        (): PortClassification => classificationOverride,
+      );
+      await page.exposeFunction("__spmCompile", () => {
+        compileCalls += 1;
+      });
+      await page.exposeFunction("__spmFlash", () => {
+        flashCalls += 1;
+      });
 
       // Install window.api before any page script runs.
       await page.addInitScript(() => {
         const w = window as unknown as Record<string, (...a: unknown[]) => unknown>;
-        const logCbs: ((e: unknown) => void)[] = [];
-        const statusCbs: ((e: unknown) => void)[] = [];
-        (window as unknown as Record<string, unknown>).__emitBuildLog = (e: unknown) =>
-          logCbs.forEach((cb) => cb(e));
-        (window as unknown as Record<string, unknown>).__emitBuildStatus = (e: unknown) =>
-          statusCbs.forEach((cb) => cb(e));
+        const compileLogCbs: ((e: unknown) => void)[] = [];
+        const compileStatusCbs: ((e: unknown) => void)[] = [];
+        const flashLogCbs: ((e: unknown) => void)[] = [];
+        const flashStatusCbs: ((e: unknown) => void)[] = [];
+        (window as unknown as Record<string, unknown>).__emitCompileLog = (e: unknown) =>
+          compileLogCbs.forEach((cb) => cb(e));
+        (window as unknown as Record<string, unknown>).__emitCompileStatus = (e: unknown) =>
+          compileStatusCbs.forEach((cb) => cb(e));
+        (window as unknown as Record<string, unknown>).__emitFlashLog = (e: unknown) =>
+          flashLogCbs.forEach((cb) => cb(e));
+        (window as unknown as Record<string, unknown>).__emitFlashStatus = (e: unknown) =>
+          flashStatusCbs.forEach((cb) => cb(e));
 
         const sub = (arr: ((e: unknown) => void)[], cb: (e: unknown) => void) => {
           arr.push(cb);
@@ -206,10 +243,23 @@ export const test = base.extend<Fixtures>({
           generateBoard: () => defer({ boardId: "", files: [] }),
 
           listSerialPorts: () => w.__spmPorts(),
-          buildBoard: () => defer(undefined),
+          detectPio: () => w.__spmPio(),
+          compileBoard: () => {
+            w.__spmCompile();
+            return defer(undefined);
+          },
+          flashBoard: () => {
+            w.__spmFlash();
+            return defer(undefined);
+          },
+          classifyPort: () => w.__spmClassify(),
+          exportArduinoSketch: () => defer({ path: "/mock/exported-sketch" }),
+          exportPlatformioProject: () => defer({ path: "/mock/exported-pio" }),
 
-          onBuildLog: (cb: (e: unknown) => void) => sub(logCbs, cb),
-          onBuildStatus: (cb: (e: unknown) => void) => sub(statusCbs, cb),
+          onCompileLog: (cb: (e: unknown) => void) => sub(compileLogCbs, cb),
+          onCompileStatus: (cb: (e: unknown) => void) => sub(compileStatusCbs, cb),
+          onFlashLog: (cb: (e: unknown) => void) => sub(flashLogCbs, cb),
+          onFlashStatus: (cb: (e: unknown) => void) => sub(flashStatusCbs, cb),
           onUpdateStatus: () => () => {},
           installUpdate: () => Promise.resolve(),
           appVersion: () => Promise.resolve("0.0.0-test"),
@@ -229,8 +279,16 @@ export const test = base.extend<Fixtures>({
         setPorts(ports) {
           portsOverride = ports;
         },
+        setPio(info) {
+          pioOverride = info;
+        },
+        setClassification(result) {
+          classificationOverride = result;
+        },
         portListCalls: () => portListCalls,
         saveCalls: () => saveCalls,
+        compileCalls: () => compileCalls,
+        flashCalls: () => flashCalls,
       };
 
       await use(control);
@@ -239,27 +297,22 @@ export const test = base.extend<Fixtures>({
   ],
 
   ws: async ({ page }, use) => {
+    const emit = (fn: string, boardId: string, extra: Record<string, unknown>) =>
+      page.evaluate(
+        ([f, payload]) =>
+          (window as unknown as Record<string, (x: unknown) => void>)[f as string](payload),
+        [fn, { boardId, ...extra }] as [string, Record<string, unknown>],
+      );
+
     const handle: WsHandle = {
-      sendLog: (boardId, line, isErr = false) =>
-        page.evaluate(
-          ([b, l, e]) =>
-            (window as unknown as { __emitBuildLog: (x: unknown) => void }).__emitBuildLog({
-              boardId: b,
-              line: l,
-              isErr: e,
-            }),
-          [boardId, line, isErr] as [string, string, boolean],
-        ),
-      sendStatus: (boardId, success, exitCode = success ? 0 : 1) =>
-        page.evaluate(
-          ([b, s, c]) =>
-            (window as unknown as { __emitBuildStatus: (x: unknown) => void }).__emitBuildStatus({
-              boardId: b,
-              success: s,
-              exitCode: c,
-            }),
-          [boardId, success, exitCode] as [string, boolean, number],
-        ),
+      sendCompileLog: (boardId, line, isErr = false) =>
+        emit("__emitCompileLog", boardId, { line, isErr }),
+      sendCompileStatus: (boardId, success, exitCode = success ? 0 : 1) =>
+        emit("__emitCompileStatus", boardId, { success, exitCode }),
+      sendFlashLog: (boardId, line, isErr = false) =>
+        emit("__emitFlashLog", boardId, { line, isErr }),
+      sendFlashStatus: (boardId, success, exitCode = success ? 0 : 1) =>
+        emit("__emitFlashStatus", boardId, { success, exitCode }),
     };
     await use(handle);
   },
