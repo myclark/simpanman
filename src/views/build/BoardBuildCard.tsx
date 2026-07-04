@@ -1,13 +1,26 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useProjectStore } from "@/store";
 import { BOARD_TYPES } from "@/views/BoardsView";
 import { formatError, formatWarning } from "@/views/ControlsView";
-import type { Board, BuildLogLine } from "@/types";
+import type { Board, BuildLogLine, PortClassification, SerialPort } from "@/types";
 import { LogPane, StatusBadge } from "./shared";
 
 export default function BoardBuildCard({ board }: { board: Board }) {
-  const { project, validationReport, pio, boardBuild, generateFirmware, exportArduinoSketch, exportPlatformioProject, compileBoard } =
-    useProjectStore();
+  const {
+    project,
+    validationReport,
+    pio,
+    boardBuild,
+    projectVersion,
+    generateFirmware,
+    exportArduinoSketch,
+    exportPlatformioProject,
+    compileBoard,
+    serialPorts,
+    listPorts,
+    classifyPort,
+    flashBoard,
+  } = useProjectStore();
 
   const build = boardBuild[board.id] ?? {
     compileStatus: "idle" as const,
@@ -16,6 +29,9 @@ export default function BoardBuildCard({ board }: { board: Board }) {
     flashStatus: "idle" as const,
     flashLogs: [] as BuildLogLine[],
   };
+
+  const isStale = build.compiledAtVersion !== null && build.compiledAtVersion !== projectVersion;
+  const canProgram = build.compileStatus === "success" && !isStale;
 
   const relevantErrors = (validationReport?.errors ?? []).filter((e) => {
     if (e.boardId === board.id) return true;
@@ -36,6 +52,17 @@ export default function BoardBuildCard({ board }: { board: Board }) {
   const [copyState, setCopyState] = useState<"idle" | "copied">("idle");
   const [arduinoExportPath, setArduinoExportPath] = useState<string | null>(null);
   const [pioExportPath, setPioExportPath] = useState<string | null>(null);
+  const [selectedPort, setSelectedPort] = useState("");
+  const [detecting, setDetecting] = useState(false);
+  const [pollHandle, setPollHandle] = useState<ReturnType<typeof setInterval> | null>(null);
+  const [detectedPort, setDetectedPort] = useState<SerialPort | null>(null);
+  const [classification, setClassification] = useState<PortClassification | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pollHandle) clearInterval(pollHandle);
+    };
+  }, [pollHandle]);
 
   async function handleCopy() {
     const generated = await generateFirmware(board.id);
@@ -54,6 +81,47 @@ export default function BoardBuildCard({ board }: { board: Board }) {
   async function handleExportPlatformio() {
     const result = await exportPlatformioProject(board.id);
     if (result) setPioExportPath(result.path);
+  }
+
+  async function startDetect() {
+    setDetecting(true);
+    setDetectedPort(null);
+    setClassification(null);
+    await listPorts();
+    const baseline = useProjectStore.getState().serialPorts;
+
+    const handle = setInterval(async () => {
+      await listPorts();
+      const current = useProjectStore.getState().serialPorts;
+      const added = current.find((p) => !baseline.some((b) => b.name === p.name));
+      if (added) {
+        clearInterval(handle);
+        setPollHandle(null);
+        setDetecting(false);
+        setDetectedPort(added);
+        const result = await classifyPort(board.id, added);
+        setClassification(result);
+        if (result === "self" || result === "stock") {
+          setSelectedPort(added.name);
+        }
+      }
+    }, 1000);
+    setPollHandle(handle);
+  }
+
+  function cancelDetect() {
+    if (pollHandle) clearInterval(pollHandle);
+    setPollHandle(null);
+    setDetecting(false);
+  }
+
+  function confirmDetectedPort() {
+    if (detectedPort) setSelectedPort(detectedPort.name);
+  }
+
+  function dismissDetectedPort() {
+    setDetectedPort(null);
+    setClassification(null);
   }
 
   return (
@@ -174,6 +242,132 @@ export default function BoardBuildCard({ board }: { board: Board }) {
               </div>
             )}
             {build.compileLogs.length > 0 && <LogPane logs={build.compileLogs} />}
+          </>
+        )}
+      </div>
+
+      {/* Stage 3: Program */}
+      <div className="border-t border-[#30363d]">
+        <div className="flex items-center justify-between px-4 py-2 bg-[#161b22]">
+          <span className="text-xs font-semibold text-[#8b949e]">Program</span>
+          <StatusBadge status={build.flashStatus} activeLabel="Flashing…" />
+        </div>
+        {!canProgram ? (
+          <div className="px-4 py-3 text-xs text-[#484f58]">
+            {isStale
+              ? "The panel design changed since the last successful compile — recompile before programming."
+              : "Requires a successful Build first."}
+          </div>
+        ) : (
+          <>
+            <div className="flex items-center gap-3 px-4 py-3 bg-[#1c2333]">
+              <div className="flex items-center gap-2 flex-1 min-w-0">
+                <label className="text-xs text-[#8b949e] shrink-0">Port:</label>
+                <select
+                  value={selectedPort}
+                  onChange={(e) => setSelectedPort(e.target.value)}
+                  className="flex-1 min-w-0 text-xs bg-[#21262d] border border-[#30363d] rounded px-2 py-1 text-[#e6edf3] focus:outline-none focus:border-[#58a6ff]"
+                >
+                  <option value="">— Select a port —</option>
+                  {serialPorts.map((p) => (
+                    <option key={p.name} value={p.name}>
+                      {p.name}
+                      {p.description ? ` (${p.description})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <button
+                onClick={startDetect}
+                disabled={detecting}
+                className="px-3 py-1.5 text-xs rounded bg-[#21262d] hover:bg-[#30363d] border border-[#30363d] transition-colors shrink-0"
+              >
+                {detecting ? "Waiting for board…" : "Detect board"}
+              </button>
+
+              <button
+                onClick={() => flashBoard(board.id, selectedPort)}
+                disabled={!selectedPort || build.flashStatus === "flashing"}
+                className={`px-4 py-1.5 text-sm rounded font-medium transition-colors shrink-0 ${
+                  build.flashStatus === "flashing"
+                    ? "bg-[#21262d] text-[#484f58] cursor-not-allowed"
+                    : "bg-[#1f6feb] hover:bg-[#388bfd] text-white"
+                }`}
+              >
+                {build.flashStatus === "flashing" ? "Flashing…" : "Flash"}
+              </button>
+            </div>
+
+            {detecting && (
+              <div className="px-4 py-2 text-xs text-[#8b949e] flex items-center gap-2">
+                Connect the board for &quot;{board.name}&quot; now…
+                <button onClick={cancelDetect} className="underline">
+                  Cancel
+                </button>
+              </div>
+            )}
+
+            {detectedPort && classification && (classification === "self" || classification === "stock") && (
+              <div className="px-4 py-2 text-xs text-[#3fb950]">
+                Detected {detectedPort.name} —{" "}
+                {classification === "self"
+                  ? "matches this board, ready to re-flash."
+                  : "unflashed board, ready to program."}
+              </div>
+            )}
+
+            {detectedPort && classification === "foreign" && (
+              <div className="px-4 py-3 bg-[#161b22] border-t border-[#30363d] space-y-2 text-xs">
+                <div className="text-[#d29922]">
+                  This board reports a Sim Panel Manager identity from another board/project (
+                  {detectedPort.product ?? "unknown product"}, VID 0x
+                  {detectedPort.vid?.toString(16).padStart(4, "0")} / PID 0x
+                  {detectedPort.pid?.toString(16).padStart(4, "0")}). Continuing will overwrite it
+                  with &quot;{board.name}&quot;'s firmware.
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={confirmDetectedPort}
+                    className="px-2 py-1 rounded bg-[#1f6feb] hover:bg-[#388bfd] text-white"
+                  >
+                    Yes, overwrite it
+                  </button>
+                  <button
+                    onClick={dismissDetectedPort}
+                    className="px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] border border-[#30363d]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {detectedPort && classification === "unknown" && (
+              <div className="px-4 py-3 bg-[#161b22] border-t border-[#30363d] space-y-2 text-xs">
+                <div className="text-[#8b949e]">
+                  Detected {detectedPort.name}
+                  {detectedPort.description ? ` (${detectedPort.description})` : ""} — not
+                  recognized as a stock or previously-programmed board.
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={confirmDetectedPort}
+                    className="px-2 py-1 rounded bg-[#1f6feb] hover:bg-[#388bfd] text-white"
+                  >
+                    Use this port
+                  </button>
+                  <button
+                    onClick={dismissDetectedPort}
+                    className="px-2 py-1 rounded bg-[#21262d] hover:bg-[#30363d] border border-[#30363d]"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {build.flashLogs.length > 0 && <LogPane logs={build.flashLogs} />}
           </>
         )}
       </div>
